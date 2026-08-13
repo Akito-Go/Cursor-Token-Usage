@@ -18,18 +18,29 @@ Cursor now bills by tokens in two pools (not the old “fast-premium requests + 
 - **Auto refresh** — Configurable polling interval (default: 30 seconds)
 - **Usage alerts** — Notifications when usage changes exceed thresholds between two polls
 - **i18n** — English and Chinese (Simplified); the editor language drives the UI
+- **macOS / Windows / Linux** — Universal VSIX. Auto-reads the local Cursor session (`state.vscdb`); Windows uses `%APPDATA%\Cursor\...`
 - **Remote development** — Declared as a UI extension (`extensionKind: ui`) so it runs on your **local** machine and can still read your Cursor session when the workspace is on **SSH Remote**, WSL, or Dev Containers
 
 ### Installation
 
 1. Download or build the `.vsix` package
-2. In Cursor: `Cmd+Shift+P` → `Extensions: Install from VSIX...`
+2. In Cursor: `Cmd+Shift+P` (Windows: `Ctrl+Shift+P`) → `Extensions: Install from VSIX...`
 3. Select the `.vsix` file
 4. `Developer: Reload Window`
 
 ### Authentication
 
 The extension tries to read your Cursor session from the local database (`state.vscdb`: `cursorAuth/accessToken` + user id) and sends it as the `WorkosCursorSessionToken` cookie to `cursor.com` only.
+
+Session file locations:
+
+| OS | Path |
+|----|------|
+| macOS | `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb` |
+| Windows | `%APPDATA%\Cursor\User\globalStorage\state.vscdb` |
+| Linux | `~/.config/Cursor/User/globalStorage/state.vscdb` |
+
+Auto-detect needs **Python 3** on PATH (`python3` / `python`, or the Windows `py` launcher). If Python is missing, use **Set Session Token** — the rest of the extension still works.
 
 If automatic detection fails:
 
@@ -141,18 +152,29 @@ Cursor 已改为按 token、双池计费（不再是旧的「fast-premium 请求
 - **自动刷新** — 可配置轮询间隔（默认 30 秒）
 - **用量提醒** — 两次轮询之间的变化超过阈值时弹窗
 - **国际化** — 中英文本地化，跟随编辑器语言
+- **macOS / Windows / Linux** — 通用 VSIX。自动读本机 Cursor 会话（`state.vscdb`）；Windows 路径为 `%APPDATA%\Cursor\...`
 - **远程开发** — 声明为 UI 扩展（`extensionKind: ui`），在**本机**运行；工作区在 SSH Remote、WSL 或 Dev Containers 时仍能读本机 Cursor 登录
 
 ### 安装方法
 
 1. 下载或构建 `.vsix` 安装包
-2. 在 Cursor 中：`Cmd+Shift+P` → `Extensions: Install from VSIX...`
+2. 在 Cursor 中：`Cmd+Shift+P`（Windows：`Ctrl+Shift+P`）→ `Extensions: Install from VSIX...`
 3. 选择 `.vsix` 文件
 4. 执行 `Developer: Reload Window`
 
 ### 认证方式
 
 扩展会尝试从本机 `state.vscdb` 读取 `cursorAuth/accessToken` 与用户 id，拼成 `WorkosCursorSessionToken` Cookie，且只发给 `cursor.com`。
+
+会话文件位置：
+
+| 系统 | 路径 |
+|------|------|
+| macOS | `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb` |
+| Windows | `%APPDATA%\Cursor\User\globalStorage\state.vscdb` |
+| Linux | `~/.config/Cursor/User/globalStorage/state.vscdb` |
+
+自动读取需要 PATH 上有 **Python 3**（`python3` / `python`，Windows 也可用 `py` 启动器）。没有 Python 时用 **Set Session Token**，其余功能仍可用。
 
 若自动检测失败：
 

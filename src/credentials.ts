@@ -113,9 +113,15 @@ function extractUserId(oauthId: string): string | null {
 }
 
 async function queryDb(dbPath: string, key: string): Promise<string | null> {
-  const cmds = process.platform === "win32" ? ["python", "py", "python3"] : ["python3", "python"];
+  const cmds = process.platform === "win32" ? ["py", "python", "python3"] : ["python3", "python"];
   const script =
-    "import sqlite3, sys; conn = sqlite3.connect(f'file:{sys.argv[1]}?mode=ro', uri=True); cur = conn.cursor(); " +
+    "import sqlite3, sys, pathlib; p = pathlib.Path(sys.argv[1]).expanduser().resolve(); " +
+    "conn = None\n" +
+    "try:\n" +
+    "    conn = sqlite3.connect(p.as_uri() + '?mode=ro', uri=True)\n" +
+    "except Exception:\n" +
+    "    conn = sqlite3.connect(str(p))\n" +
+    "cur = conn.cursor(); " +
     "cur.execute('SELECT value FROM ItemTable WHERE key = ? LIMIT 1', (sys.argv[2],)); " +
     "row = cur.fetchone(); print(row[0] if row and row[0] else ''); conn.close()";
   for (const cmd of cmds) {
