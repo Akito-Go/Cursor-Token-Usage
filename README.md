@@ -23,10 +23,9 @@ Cursor now bills by tokens in two pools (not the old “fast-premium requests + 
 
 ### Installation
 
-1. Download or build the `.vsix` package
-2. In Cursor: `Cmd+Shift+P` (Windows: `Ctrl+Shift+P`) → `Extensions: Install from VSIX...`
-3. Select the `.vsix` file
-4. `Developer: Reload Window`
+1. Download `cursor-token-usage-1.0.5.vsix` from [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.0.5)
+2. Drag the file into Cursor, or `Cmd+Shift+P` (Windows: `Ctrl+Shift+P`) → `Extensions: Install from VSIX...`
+3. `Developer: Reload Window`
 
 ### Authentication
 
@@ -157,10 +156,9 @@ Cursor 已改为按 token、双池计费（不再是旧的「fast-premium 请求
 
 ### 安装方法
 
-1. 下载或构建 `.vsix` 安装包
-2. 在 Cursor 中：`Cmd+Shift+P`（Windows：`Ctrl+Shift+P`）→ `Extensions: Install from VSIX...`
-3. 选择 `.vsix` 文件
-4. 执行 `Developer: Reload Window`
+1. 从 [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.0.5) 下载 `cursor-token-usage-1.0.5.vsix`
+2. 把文件拖进 Cursor，或 `Cmd+Shift+P`（Windows：`Ctrl+Shift+P`）→ `Extensions: Install from VSIX...`
+3. 执行 `Developer: Reload Window`
 
 ### 认证方式
 
