@@ -73,13 +73,13 @@ async function getSessionToken(): Promise<{ userId: string; cookieValue: string 
 export async function fetchUsage(): Promise<FetchResult> {
   const session = await getSessionToken();
   if (!session) {
-    return { snapshot: null, error: "无法获取 Session Token", eventsError: false, aggError: false };
+    return { snapshot: null, error: vscode.l10n.t("Unable to get Session Token"), eventsError: false, aggError: false };
   }
 
   const summary = await httpGet("https://cursor.com/api/usage-summary", session.cookieValue);
   if (!summary) {
     log("获取 /api/usage-summary 失败");
-    return { snapshot: null, error: "获取 usage-summary 失败", eventsError: false, aggError: false };
+    return { snapshot: null, error: vscode.l10n.t("Failed to fetch usage-summary"), eventsError: false, aggError: false };
   }
 
   const parsed = parseSummary(summary);
@@ -94,7 +94,7 @@ export async function fetchUsage(): Promise<FetchResult> {
 
   const [aggResult, eventsResult] = await Promise.all([
     fetchAggregations(session.cookieValue, startMs, endMs),
-    fetchUsageEvents(session.cookieValue, displayCount, startMs, endMs),
+    fetchUsageEvents(session.cookieValue, Math.max(displayCount, 100), startMs, endMs),
   ]);
 
   const aggregations = aggResult.aggs;
@@ -177,17 +177,22 @@ function parseSummary(data: Record<string, unknown>): Omit<UsageSnapshot, "times
 
   const displayMode: UsageSnapshot["displayMode"] = hasPlanPercents || !hasOverall ? "pools" : "overall";
 
-  const individualEnabled = onDemand.enabled === true;
-  const onDemandEnabled = individualEnabled || teamOnDemand.enabled === true;
-  const onDemandUsedCents = individualEnabled
-    ? parseCents(onDemand.used)
-    : parseCents(teamOnDemand.used);
-  const onDemandLimitCents = individualEnabled
-    ? parseCents(onDemand.limit)
-    : parseCents(teamOnDemand.limit);
+  const membershipType = typeof data.membershipType === "string" ? data.membershipType : "";
+  const teamLike = /enterprise|team/i.test(membershipType);
+  const individualUsed = parseCents(onDemand.used) ?? parseCents(onDemand.usedCents);
+  const teamUsed = parseCents(teamOnDemand.used) ?? parseCents(teamOnDemand.usedCents);
+  const onDemandUsedCents = individualUsed !== null ? individualUsed : teamUsed !== null ? teamUsed : teamLike ? 0 : null;
+  const individualLimit = parseCents(onDemand.limit);
+  const teamLimit = parseCents(teamOnDemand.limit);
+  const onDemandLimitCents = individualLimit !== null ? individualLimit : teamLimit;
+  const onDemandEnabled =
+    onDemand.enabled === true ||
+    teamOnDemand.enabled === true ||
+    teamLike ||
+    (onDemandUsedCents !== null && onDemandUsedCents > 0);
 
   return {
-    membershipType: typeof data.membershipType === "string" ? data.membershipType : "",
+    membershipType,
     billingCycleStart: typeof data.billingCycleStart === "string" ? data.billingCycleStart : "",
     billingCycleEnd: typeof data.billingCycleEnd === "string" ? data.billingCycleEnd : "",
     isUnlimited: data.isUnlimited === true,
@@ -270,6 +275,7 @@ async function fetchUsageEvents(
       cacheWriteTokens: cacheWrite,
       cacheReadTokens: cacheRead,
       totalTokens: input + output + cacheWrite + cacheRead,
+      totalCents: parseCents(tok.totalCents) ?? parseCents(row.chargedCents) ?? 0,
     };
   });
   return { events, error: false };

@@ -11,12 +11,13 @@ import {
 import { UsageAlert, UsageSnapshot } from "./models";
 import { UsagePanel } from "./panel";
 import { UsageTracker } from "./tracker";
-import { formatPct, formatTokens } from "./treeView";
+import { formatPct, formatTokens, membershipLabel } from "./treeView";
 
 let pollTimer: NodeJS.Timeout | undefined;
 let tracker: UsageTracker;
 let mainStatusBar: vscode.StatusBarItem;
 let extensionContext: vscode.ExtensionContext;
+let windowFocused = true;
 
 const STATUS_ICON = "$(graph)";
 
@@ -40,6 +41,11 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("cursor-token-usage.setPollingInterval", setPollingInterval),
     vscode.commands.registerCommand("cursor-token-usage.setStatusBarAlignment", setStatusBarAlignment),
     vscode.commands.registerCommand("cursor-token-usage.configureAlerts", configureAlerts),
+    vscode.window.onDidChangeWindowState((state) => {
+      windowFocused = state.focused;
+      startPolling();
+      if (state.focused) void tracker.poll();
+    }),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration("cursorTokenUsage.pollingInterval")) startPolling();
       if (e.affectsConfiguration("cursorTokenUsage.statusBarAlignment")) recreateStatusBar();
@@ -58,9 +64,10 @@ export function deactivate(): void {
 function startPolling(): void {
   if (pollTimer) clearInterval(pollTimer);
   const seconds = vscode.workspace.getConfiguration("cursorTokenUsage").get<number>("pollingInterval", 30);
+  const interval = windowFocused ? Math.max(5, seconds) : Math.max(90, seconds);
   pollTimer = setInterval(() => {
     void tracker.poll();
-  }, Math.max(5, seconds) * 1000);
+  }, interval * 1000);
 }
 
 async function refresh(): Promise<void> {
@@ -104,13 +111,23 @@ function updateStatusBar(): void {
   const snapshot = tracker.lastSnapshot;
   if (!snapshot) {
     const err = tracker.lastError;
-    mainStatusBar.text = err ? `$(warning) Token ?` : `${STATUS_ICON} Token …`;
+    const needToken = isTokenError(err);
+    mainStatusBar.text = needToken
+      ? `$(key) ${vscode.l10n.t("Set Token")}`
+      : err
+        ? `$(warning) ${vscode.l10n.t("Token ?")}`
+        : `${STATUS_ICON} ${vscode.l10n.t("Loading...")}`;
     mainStatusBar.backgroundColor = err
       ? new vscode.ThemeColor("statusBarItem.warningBackground")
       : undefined;
-    mainStatusBar.tooltip = err
-      ? `${err}\n${vscode.l10n.t("Click to view details")}`
-      : vscode.l10n.t("Loading...");
+    mainStatusBar.color = err
+      ? new vscode.ThemeColor("statusBarItem.warningForeground")
+      : undefined;
+    mainStatusBar.tooltip = needToken
+      ? vscode.l10n.t("Click to set Session Token")
+      : err
+        ? `${err}\n${vscode.l10n.t("Click to view details")}`
+        : vscode.l10n.t("Loading...");
     return;
   }
 
@@ -123,17 +140,21 @@ function updateStatusBar(): void {
   }
   mainStatusBar.tooltip = buildTooltip(snapshot);
   const ratio = usageRatio(snapshot);
-  mainStatusBar.backgroundColor =
-    !snapshot.isUnlimited && ratio !== null && ratio >= 1
-      ? new vscode.ThemeColor("statusBarItem.errorBackground")
-      : !snapshot.isUnlimited && ratio !== null && ratio >= 0.8
-        ? new vscode.ThemeColor("statusBarItem.warningBackground")
-        : undefined;
+  if (!snapshot.isUnlimited && ratio !== null && ratio >= 1) {
+    mainStatusBar.backgroundColor = new vscode.ThemeColor("statusBarItem.errorBackground");
+    mainStatusBar.color = new vscode.ThemeColor("statusBarItem.errorForeground");
+  } else if (!snapshot.isUnlimited && ratio !== null && ratio >= 0.8) {
+    mainStatusBar.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
+    mainStatusBar.color = new vscode.ThemeColor("statusBarItem.warningForeground");
+  } else {
+    mainStatusBar.backgroundColor = undefined;
+    mainStatusBar.color = undefined;
+  }
 }
 
 function buildTooltip(snapshot: UsageSnapshot): string {
   const lines = [
-    `Cursor Token Usage · ${snapshot.membershipType || "—"}`,
+    `Cursor Token Usage · ${membershipLabel(snapshot.membershipType)}`,
     snapshot.displayMode === "overall" && snapshot.overallUsedCents !== null && snapshot.overallLimitCents !== null
       ? `${vscode.l10n.t("Included usage")}: ${formatCents(snapshot.overallUsedCents)}/${formatCents(snapshot.overallLimitCents)}`
       : "",
@@ -141,7 +162,11 @@ function buildTooltip(snapshot: UsageSnapshot): string {
     snapshot.otherModelsPercent !== null ? `Other Models: ${formatPct(snapshot.otherModelsPercent, snapshot.isUnlimited)}` : "",
     countdownLine(snapshot.billingCycleEnd),
     snapshot.onDemandEnabled && snapshot.onDemandUsedCents !== null
-      ? `On-Demand: ${formatCents(snapshot.onDemandUsedCents)}`
+      ? `On-Demand: ${formatCents(snapshot.onDemandUsedCents)}${
+          snapshot.onDemandLimitCents && snapshot.onDemandLimitCents > 0
+            ? `/${formatCents(snapshot.onDemandLimitCents)}`
+            : ""
+        }`
       : "",
     `${vscode.l10n.t("Total Tokens")}: ${formatTokens(snapshot.totalTokens)}`,
     vscode.l10n.t("Click to view details"),
@@ -163,7 +188,15 @@ function countdownLine(endIso: string): string {
   return vscode.l10n.t("Reset in: {0}", countdown);
 }
 
+function isTokenError(err: string | null): boolean {
+  return !!err && /session token/i.test(err);
+}
+
 function showDetails(): void {
+  if (!tracker.lastSnapshot && isTokenError(tracker.lastError)) {
+    void setToken();
+    return;
+  }
   UsagePanel.show(
     extensionContext,
     () => tracker.lastSnapshot,
@@ -255,8 +288,8 @@ async function configureAlerts(): Promise<void> {
       [
         { label: vscode.l10n.t("New usage requests"), id: "newSession" },
         { label: vscode.l10n.t("Included usage change"), id: "overallSpending" },
-        { label: "Cursor Models %", id: "cursorModels" },
-        { label: "Other Models %", id: "otherModels" },
+        { label: vscode.l10n.t("Cursor Models %"), id: "cursorModels" },
+        { label: vscode.l10n.t("Other Models %"), id: "otherModels" },
         { label: vscode.l10n.t("On-Demand spending change"), id: "onDemandSpending" },
         { label: vscode.l10n.t("Total Token consumption change"), id: "totalTokens" },
       ].map((p) => ({ ...p, picked: current.has(p.id) })),
@@ -270,8 +303,8 @@ async function configureAlerts(): Promise<void> {
   const keys = [
     { id: "newSession", label: vscode.l10n.t("New usage requests") },
     { id: "overallSpending", label: vscode.l10n.t("Included usage change") },
-    { id: "cursorModels", label: "Cursor Models %" },
-    { id: "otherModels", label: "Other Models %" },
+    { id: "cursorModels", label: vscode.l10n.t("Cursor Models %") },
+    { id: "otherModels", label: vscode.l10n.t("Other Models %") },
     { id: "onDemandSpending", label: vscode.l10n.t("On-Demand spending change") },
     { id: "totalTokens", label: vscode.l10n.t("Total Token consumption change") },
   ];

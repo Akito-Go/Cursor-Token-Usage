@@ -7,6 +7,7 @@ export interface UsageEvent {
   outputTokens: number;
   cacheWriteTokens: number;
   cacheReadTokens: number;
+  totalCents: number;
 }
 
 export interface ModelAgg {

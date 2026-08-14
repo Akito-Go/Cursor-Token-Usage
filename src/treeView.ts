@@ -34,13 +34,13 @@ export class UsageTreeProvider implements vscode.TreeDataProvider<UsageTreeItem>
       summary.contextValue = "summarySection";
       const children: UsageTreeItem[] = [];
       if (!hidden.includes("cursorModels")) {
-        children.push(percentItem("Cursor Models", "cursorModels", snapshot.cursorModelsPercent, snapshot.isUnlimited));
+        children.push(percentItem(vscode.l10n.t("Cursor Models"), "cursorModels", snapshot.cursorModelsPercent, snapshot.isUnlimited));
       }
       if (!hidden.includes("otherModels")) {
-        children.push(percentItem("Other Models", "otherModels", snapshot.otherModelsPercent, snapshot.isUnlimited));
+        children.push(percentItem(vscode.l10n.t("Other Models"), "otherModels", snapshot.otherModelsPercent, snapshot.isUnlimited));
       }
       if (!hidden.includes("onDemandUsage") && snapshot.onDemandEnabled && snapshot.onDemandUsedCents !== null) {
-        const od = new UsageTreeItem("On-Demand", vscode.TreeItemCollapsibleState.None);
+        const od = new UsageTreeItem(vscode.l10n.t("On-Demand"), vscode.TreeItemCollapsibleState.None);
         const spent = `$${(snapshot.onDemandUsedCents / 100).toFixed(2)}`;
         od.description =
           snapshot.onDemandLimitCents && snapshot.onDemandLimitCents > 0
@@ -115,13 +115,13 @@ export class UsageTreeProvider implements vscode.TreeDataProvider<UsageTreeItem>
             vscode.TreeItemCollapsibleState.Collapsed,
           );
           entry.id = `event_${e.timestamp}`;
-          entry.description = e.kind.includes("USAGE_BASED") ? "On-Demand" : "Included";
+          entry.description = e.kind.includes("USAGE_BASED") ? vscode.l10n.t("On-Demand") : vscode.l10n.t("Included");
           entry.iconPath = e.kind.includes("USAGE_BASED")
             ? new vscode.ThemeIcon("zap", new vscode.ThemeColor("charts.orange"))
             : new vscode.ThemeIcon("check", new vscode.ThemeColor("charts.green"));
           entry.contextValue = "recentEvent";
           const tokensItem = new UsageTreeItem(
-            `Tokens: ${formatTokens(e.totalTokens)}`,
+            `${vscode.l10n.t("Tokens")}: ${formatTokens(e.totalTokens)}`,
             showDetail ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None,
           );
           tokensItem.iconPath = new vscode.ThemeIcon("symbol-number");
@@ -192,7 +192,7 @@ function leaf(label: string, icon: string): UsageTreeItem {
 }
 
 function resetLabel(endIso: string, plan: string): string {
-  const planLabel = plan ? ` · ${plan}` : "";
+  const planLabel = plan ? ` · ${membershipLabel(plan)}` : "";
   if (!endIso) return `${vscode.l10n.t("Billing Cycle")}${planLabel}`;
   const msLeft = Math.max(0, Date.parse(endIso) - Date.now());
   const totalSeconds = Math.ceil(msLeft / 1000);
@@ -207,23 +207,48 @@ function resetLabel(endIso: string, plan: string): string {
   return `${vscode.l10n.t("Billing Cycle (Reset in: {0})", countdown)}${planLabel}`;
 }
 
+export function isZh(): boolean {
+  return vscode.env.language.toLowerCase().startsWith("zh");
+}
+
+export function membershipLabel(type: string): string {
+  const key = type.trim().toLowerCase();
+  if (key === "enterprise") return vscode.l10n.t("Enterprise");
+  if (key === "team") return vscode.l10n.t("Team");
+  if (key === "pro") return vscode.l10n.t("Pro");
+  if (key === "free" || key === "hobby") return vscode.l10n.t("Free");
+  return type || "—";
+}
+
 export function formatCents(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
 export function formatTokens(tokens: number): string {
-  if (tokens >= 10000) return `${(tokens / 10000).toFixed(1)}万`;
+  if (isZh() && tokens >= 10000) return `${(tokens / 10000).toFixed(1)}万`;
+  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;
   if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}K`;
   return `${tokens}`;
 }
 
 export function formatEventTime(ts: number): string {
-  const d = new Date(ts);
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  const h = String(d.getHours()).padStart(2, "0");
-  const m = String(d.getMinutes()).padStart(2, "0");
-  return `${month}-${day} ${h}:${m}`;
+  const ms = ts > 0 && ts < 1e12 ? ts * 1000 : ts;
+  const d = new Date(ms);
+  try {
+    return d.toLocaleString(vscode.env.language.replace("_", "-"), {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  } catch {
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    const h = String(d.getHours()).padStart(2, "0");
+    const m = String(d.getMinutes()).padStart(2, "0");
+    return `${month}-${day} ${h}:${m}`;
+  }
 }
 
 export function shortenModel(model: string): string {

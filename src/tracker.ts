@@ -72,7 +72,7 @@ export class UsageTracker {
         fetchUsage(),
         new Promise((resolve) =>
           setTimeout(
-            () => resolve({ snapshot: null, error: "数据获取超时", eventsError: false, aggError: false }),
+            () => resolve({ snapshot: null, error: vscode.l10n.t("Timed out fetching usage"), eventsError: false, aggError: false }),
             90000,
           ),
         ),

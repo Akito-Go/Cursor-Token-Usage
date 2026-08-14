@@ -23,7 +23,7 @@ Cursor now bills by tokens in two pools (not the old “fast-premium requests + 
 
 ### Installation
 
-1. Download `cursor-token-usage-1.0.5.vsix` from [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.0.5)
+1. Download `cursor-token-usage-1.0.6.vsix` from [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.0.6)
 2. Drag the file into Cursor, or `Cmd+Shift+P` (Windows: `Ctrl+Shift+P`) → `Extensions: Install from VSIX...`
 3. `Developer: Reload Window`
 
@@ -125,6 +125,16 @@ Cursor often returns `$0` / `chargedCents: 0` on usage events for self-serve pla
 
 This extension only shows `$` when the API itself returns cents (for example `individualUsage.overall` used/limit, or on-demand used/limit). Token counts are always shown as tokens.
 
+### Changelog (1.0.6)
+
+- Status bar shows **Set Token** when the session is missing
+- English token units use K/M; Chinese still uses 万
+- Slower polling while the window is unfocused
+- Per-model bars show share of total tokens
+- Trend chart: Token stacked bars (input / output / cache) + line; Cost bars only when the API returns cents; model filter; hover tooltip; selectable date range
+- Team/Enterprise: On-Demand always shown (API cents, including $0)
+- Webview follows Cursor light/dark via `--vscode-*` theme colors
+
 ### Build from Source
 
 ```bash
@@ -156,7 +166,7 @@ Cursor 已改为按 token、双池计费（不再是旧的「fast-premium 请求
 
 ### 安装方法
 
-1. 从 [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.0.5) 下载 `cursor-token-usage-1.0.5.vsix`
+1. 从 [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.0.6) 下载 `cursor-token-usage-1.0.6.vsix`
 2. 把文件拖进 Cursor，或 `Cmd+Shift+P`（Windows：`Ctrl+Shift+P`）→ `Extensions: Install from VSIX...`
 3. 执行 `Developer: Reload Window`
 
@@ -257,6 +267,16 @@ Cursor 已改为按 token、双池计费（不再是旧的「fast-premium 请求
 自助套餐的用量事件里，美元字段经常是 `$0`（`chargedCents: 0`），即使已经消耗了 token。用 token × 官网单价去乘，对不上账单：套餐额度、团队 / 企业折扣、Cursor Token Rate 都在服务端结算。
 
 只有接口自己返回美分时才显示 `$`（例如 `individualUsage.overall` 的 used/limit，或 On-Demand used/limit）。Token 始终按 token 显示。
+
+### 更新说明（1.0.6）
+
+- 读不到会话时状态栏显示 **Set Token**
+- 英文 Token 单位用 K/M，中文满万仍用「万」
+- 窗口失焦时降低轮询频率
+- 按模型进度条显示占总用量比例
+- 趋势图：Token 为输入/输出/缓存堆叠柱 + 折线；费用仅在接口返回美分时绘制；可按模型筛选；悬停看明细；日期范围可选
+- 团队/企业：始终显示 On-Demand（接口美分，含 $0）
+- Webview 跟随 Cursor 浅色/深色主题（`--vscode-*` 变量）
 
 ### 从源码构建
 
