@@ -1,217 +1,81 @@
+<p align="center">
+  <img src="icon.png" width="96" alt="Cursor Token Usage">
+</p>
+
 # Cursor Token Usage
 
-[English](#english) | [中文](#中文)
+**在状态栏显示 Cursor 现行 token 计费用量的 VS Code / Cursor 扩展**
+
+[![Release](https://img.shields.io/github/v/release/Akito-Go/Cursor-Token-Usage)](https://github.com/Akito-Go/Cursor-Token-Usage/releases)
+[![Marketplace](https://img.shields.io/visual-studio-marketplace/v/akitogo.cursor-token-usage?label=VS%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=akitogo.cursor-token-usage)
+[![Open VSX](https://img.shields.io/open-vsx/v/akitogo/cursor-token-usage)](https://open-vsx.org/extension/akitogo/cursor-token-usage)
+[![License](https://img.shields.io/github/license/Akito-Go/Cursor-Token-Usage)](LICENSE)
+
+[中文](#cursor-token-usage) · [English](#english) · [快速开始](#快速开始) · [核心特性](#核心特性) · [认证](#认证) · [界面](#操作界面) · [FAQ](#常见问题)
 
 ---
 
-## English
+Cursor 已改为按 token、双池计费（不再是旧的「fast-premium 请求次数 + 美元」）。本扩展读取 dashboard 接口，按账号类型切换展示：个人看双池百分比，团队 / 企业看套餐内花费。
 
-A VS Code / Cursor IDE extension that shows your current Cursor **token billing** on the status bar. Click the status bar to open a details panel with progress bars, per-model tokens, and recent events.
+## 核心特性
 
-Cursor now bills by tokens in two pools (not the old “fast-premium requests + dollars” model). This extension reads the live dashboard APIs and adapts the display to your account type.
+| **状态栏常驻** 个人：`C xx% · O xx%` 团队 / 企业：套餐内已用 vs 上限（接口美分，非本地估算） | **详情面板** 点击状态栏：环形用量、彩色进度条、按模型 Token、最近事件、趋势图 |
+| --- | --- |
+| **账号自适应** 类型来自接口（`individual` / `team` / `enterprise`），不从 token 猜测 | **用量提醒** 两次轮询之间的变化超过阈值时弹窗，监控项与阈值可配 |
 
-### Features
+**更多亮点：**
 
-- **Status bar** — Always-on usage: individual accounts show `C xx% · O xx%`; Team / Enterprise show included spend vs limit (values returned by Cursor, in cents)
-- **Details panel** — Click the status bar for a circular usage ring, colored progress bars, per-model token bars, and recent events
-- **Account-aware** — Membership type is inferred from the API (`individual` vs `team` / `enterprise`), not from the token itself
-- **Auto refresh** — Configurable polling interval (default: 30 seconds)
-- **Usage alerts** — Notifications when usage changes exceed thresholds between two polls
-- **i18n** — English and Chinese (Simplified); the editor language drives the UI
-- **macOS / Windows / Linux** — Universal VSIX. Auto-reads the local Cursor session (`state.vscdb`); Windows uses `%APPDATA%\Cursor\...`
-- **Remote development** — Declared as a UI extension (`extensionKind: ui`) so it runs on your **local** machine and can still read your Cursor session when the workspace is on **SSH Remote**, WSL, or Dev Containers
+- 自动刷新，默认 30 秒；窗口失焦时降低频率
+- 中 / 英界面，跟随编辑器语言
+- macOS / Windows / Linux 通用 VSIX，自动读本机 Cursor 会话（`state.vscdb`）
+- UI 扩展（`extensionKind: ui`）：SSH Remote、WSL、Dev Containers 下仍读**本机**登录
+- 只在接口返回美分时显示 `$`，不用官网单价估算账单
 
-### Installation
+## 快速开始
 
-1. Download `cursor-token-usage-1.0.6.vsix` from [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.0.6)
-2. Drag the file into Cursor, or `Cmd+Shift+P` (Windows: `Ctrl+Shift+P`) → `Extensions: Install from VSIX...`
-3. `Developer: Reload Window`
+### 从商店安装
 
-### Authentication
+- [Open VSX](https://open-vsx.org/extension/akitogo/cursor-token-usage)（Cursor 扩展市场）
+- [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=akitogo.cursor-token-usage)
 
-The extension tries to read your Cursor session from the local database (`state.vscdb`: `cursorAuth/accessToken` + user id) and sends it as the `WorkosCursorSessionToken` cookie to `cursor.com` only.
-
-Session file locations:
-
-| OS | Path |
-|----|------|
-| macOS | `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb` |
-| Windows | `%APPDATA%\Cursor\User\globalStorage\state.vscdb` |
-| Linux | `~/.config/Cursor/User/globalStorage/state.vscdb` |
-
-Auto-detect needs **Python 3** on PATH (`python3` / `python`, or the Windows `py` launcher). If Python is missing, use **Set Session Token** — the rest of the extension still works.
-
-If automatic detection fails:
-
-1. Command Palette → **Cursor Token Usage: Set Session Token**
-2. Paste `WorkosCursorSessionToken` (format: `userId%3A%3AaccessToken`)
-3. The token is stored in VS Code SecretStorage (encrypted, never in `settings.json`)
-
-To find the cookie: open [cursor.com](https://cursor.com) in a browser → DevTools → Application → Cookies → copy `WorkosCursorSessionToken`.
-
-**Remote SSH, WSL, and Dev Containers:** This is a **UI extension**. It runs in the **local** Cursor process (where your login and `state.vscdb` live), not on the remote host. Install it locally; you do not need a copy on the remote server.
-
-### Configuration
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `cursorTokenUsage.displayCount` | 5 | How many recent usage events to show in the details panel |
-| `cursorTokenUsage.pollingInterval` | 30 | Polling interval in seconds (5–300) |
-| `cursorTokenUsage.showStatusBar` | true | Show usage on the status bar |
-| `cursorTokenUsage.statusBarAlignment` | `right` | Status bar side: `left` or `right` |
-| `cursorTokenUsage.alertEnabled` | true | Enable usage-change alerts |
-| `cursorTokenUsage.alertItems` | `["newSession", "overallSpending", "cursorModels", "otherModels", "totalTokens"]` | Metrics to watch |
-| `cursorTokenUsage.alertThreshold.newSession` | 2 | New usage requests in one poll |
-| `cursorTokenUsage.alertThreshold.overallSpending` | 1 | Included spend change ($) |
-| `cursorTokenUsage.alertThreshold.cursorModels` | 10 | Cursor Models pool change (%) |
-| `cursorTokenUsage.alertThreshold.otherModels` | 10 | Other Models pool change (%) |
-| `cursorTokenUsage.alertThreshold.onDemandSpending` | 1 | On-demand spend change ($) |
-| `cursorTokenUsage.alertThreshold.totalTokens` | 100000 | Total tokens change |
-
-### Status bar & details panel
-
-```
-Status bar (individual):     $(graph) C 42% · O 18%
-Status bar (team/enterprise): $(graph) $67.88/$52.00
-
-Details panel
-┌─────────────────────────────────────────────┐
-│ Cursor Token Usage              enterprise  │
-│ Reset in: 12d 4h          Total Tokens 1.2M │
-│                                             │
-│   (  131%  )   Included usage               │
-│                $67.88 / $52.00              │
-│ ████████████████████████████░░░░  over 100% │
-│ Cursor Models   ████████░░░░░░░░     42%    │
-│ Other Models    ███░░░░░░░░░░░░░     18%    │
-│ On-Demand       $5.74                       │
-│                                             │
-│ By Model                                    │
-│ claude-4.6-opus  ████████████████    80.1万  │
-│ gpt-5            ██████░░░░░░░░░░    12.4万  │
-│                                             │
-│ Recent Usage                                │
-│ 08-13 21:04  Claude 4.6 Opus  Included  2.1万│
-└─────────────────────────────────────────────┘
-```
-
-Bar colors: green &lt; 40%, yellow &lt; 80%, orange ≥ 80%, red ≥ 100%. Clicking the status bar opens this panel. Buttons: Refresh, Set Session Token, Status bar side, Configure Alerts.
-
-≥ 80% of the limit tints the status bar warning; ≥ 100% tints it error.
-
-### Commands
-
-| Command | What it does |
-|---------|----------------|
-| Show Token Usage Details | Open the details panel (same as clicking the status bar) |
-| Refresh Token Usage | Poll immediately |
-| Set Session Token | Paste / clear `WorkosCursorSessionToken` |
-| Set Polling Interval | 5–300 seconds |
-| Set Status Bar Side | Left or right |
-| Configure Usage Alerts | Toggle, pick metrics, set thresholds |
-
-### Usage Alerts
-
-1. Command Palette → **Cursor Token Usage: Configure Usage Alerts**, or the Alerts button in the details panel
-2. Enable alerts → Select monitoring items → Set thresholds
-3. Available monitors: new usage requests, included spend, Cursor Models %, Other Models %, On-Demand spend, total tokens
-4. A threshold of `0` means any change triggers an alert
-
-> Thresholds are checked on each poll (`pollingInterval` seconds). The value is the **delta between two consecutive polls**, not a cumulative or absolute cap. Example: `onDemandSpending` = `1.0` fires when on-demand spend rises by $1.00 or more since the last successful poll.
-
-### Why dollars are not estimated
-
-Cursor often returns `$0` / `chargedCents: 0` on usage events for self-serve plans, even when tokens were used. Multiplying tokens by public list prices would not match the invoice: included vs on-demand, Team/Enterprise discounts, and Cursor Token Rate are applied server-side.
-
-This extension only shows `$` when the API itself returns cents (for example `individualUsage.overall` used/limit, or on-demand used/limit). Token counts are always shown as tokens.
-
-### Changelog (1.0.6)
-
-- Status bar shows **Set Token** when the session is missing
-- English token units use K/M; Chinese still uses 万
-- Slower polling while the window is unfocused
-- Per-model bars show share of total tokens
-- Trend chart: Token stacked bars (input / output / cache) + line; Cost bars only when the API returns cents; model filter; hover tooltip; selectable date range
-- Team/Enterprise: On-Demand always shown (API cents, including $0)
-- Webview follows Cursor light/dark via `--vscode-*` theme colors
-
-### Build from Source
+搜 `Cursor Token Usage`，或命令行：
 
 ```bash
-npm install
-npm run compile
-npx @vscode/vsce package --no-dependencies
+# Cursor
+cursor --install-extension akitogo.cursor-token-usage
 ```
 
-Install the resulting `.vsix`, then **Developer: Reload Window**.
-
----
-
-## 中文
-
-一款 VS Code / Cursor IDE 扩展，在状态栏显示 Cursor **现行 token 计费**用量。点击状态栏打开详情面板：环形进度、彩色进度条、按模型 Token、最近调用。
-
-Cursor 已改为按 token、双池计费（不再是旧的「fast-premium 请求次数 + 美元」）。本扩展读取 dashboard 接口，并按账号类型切换展示。
-
-### 功能特性
-
-- **状态栏** — 个人账号显示 `C xx% · O xx%`；团队 / 企业显示套餐内已用 vs 上限（接口返回的美分，不是本地估算）
-- **详情面板** — 点击状态栏：环形用量、彩色进度条、按模型 Token 条、最近事件
-- **账号自适应** — 类型来自接口（`individual` / `team` / `enterprise`），不是从 token 猜的
-- **自动刷新** — 可配置轮询间隔（默认 30 秒）
-- **用量提醒** — 两次轮询之间的变化超过阈值时弹窗
-- **国际化** — 中英文本地化，跟随编辑器语言
-- **macOS / Windows / Linux** — 通用 VSIX。自动读本机 Cursor 会话（`state.vscdb`）；Windows 路径为 `%APPDATA%\Cursor\...`
-- **远程开发** — 声明为 UI 扩展（`extensionKind: ui`），在**本机**运行；工作区在 SSH Remote、WSL 或 Dev Containers 时仍能读本机 Cursor 登录
-
-### 安装方法
+### 从 VSIX 安装
 
 1. 从 [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.0.6) 下载 `cursor-token-usage-1.0.6.vsix`
-2. 把文件拖进 Cursor，或 `Cmd+Shift+P`（Windows：`Ctrl+Shift+P`）→ `Extensions: Install from VSIX...`
+2. 拖进 Cursor，或 `Cmd+Shift+P`（Windows：`Ctrl+Shift+P`）→ `Extensions: Install from VSIX...`
 3. 执行 `Developer: Reload Window`
 
-### 认证方式
+装好后状态栏应出现用量。读不到会话时显示 **Set Token**，见下方认证。
 
-扩展会尝试从本机 `state.vscdb` 读取 `cursorAuth/accessToken` 与用户 id，拼成 `WorkosCursorSessionToken` Cookie，且只发给 `cursor.com`。
+## 认证
 
-会话文件位置：
+扩展从本机 `state.vscdb` 读取 `cursorAuth/accessToken` 与用户 id，拼成 `WorkosCursorSessionToken` Cookie，**只发给 `cursor.com`**。
 
-| 系统 | 路径 |
-|------|------|
+| 系统 | 会话文件 |
+| --- | --- |
 | macOS | `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb` |
 | Windows | `%APPDATA%\Cursor\User\globalStorage\state.vscdb` |
 | Linux | `~/.config/Cursor/User/globalStorage/state.vscdb` |
 
-自动读取需要 PATH 上有 **Python 3**（`python3` / `python`，Windows 也可用 `py` 启动器）。没有 Python 时用 **Set Session Token**，其余功能仍可用。
+自动读取需要 PATH 上有 **Python 3**（`python3` / `python`，Windows 可用 `py`）。没有 Python 时用 **Set Session Token**，其余功能仍可用。
 
-若自动检测失败：
+自动检测失败时：
 
 1. 命令面板 → **Cursor Token Usage: Set Session Token**
 2. 粘贴 `WorkosCursorSessionToken`（格式：`userId%3A%3AaccessToken`）
-3. Token 用 VS Code SecretStorage 加密存储，不会写入 `settings.json`
+3. Token 写入 VS Code SecretStorage，不进 `settings.json`
 
-获取 Cookie：浏览器打开 [cursor.com](https://cursor.com) → 开发者工具 → Application → Cookies → 复制 `WorkosCursorSessionToken`。
+浏览器取 Cookie：打开 [cursor.com](https://cursor.com) → 开发者工具 → Application → Cookies → 复制 `WorkosCursorSessionToken`。
 
-**SSH Remote、WSL、Dev Containers：**本扩展为 **UI 扩展**，在**本机** Cursor 进程中运行（与登录、`state.vscdb` 同环境），不要装到远程主机。自动读会话无需在远端再装一份。
+**远程工作区：** 本扩展在本机 Cursor 进程跑，不要装到 SSH / WSL / 容器远端。
 
-### 配置项
-
-| 配置项 | 默认值 | 说明 |
-|--------|--------|------|
-| `cursorTokenUsage.displayCount` | 5 | 详情面板显示的最近用量条数 |
-| `cursorTokenUsage.pollingInterval` | 30 | 轮询间隔（秒，5–300） |
-| `cursorTokenUsage.showStatusBar` | true | 是否在状态栏显示 |
-| `cursorTokenUsage.statusBarAlignment` | `right` | 状态栏位置：`left` 或 `right` |
-| `cursorTokenUsage.alertEnabled` | true | 启用用量变化提醒 |
-| `cursorTokenUsage.alertItems` | `["newSession", "overallSpending", "cursorModels", "otherModels", "totalTokens"]` | 提醒监控项 |
-| `cursorTokenUsage.alertThreshold.newSession` | 2 | 单次轮询新增调用数 |
-| `cursorTokenUsage.alertThreshold.overallSpending` | 1 | 套餐内花费变化（$） |
-| `cursorTokenUsage.alertThreshold.cursorModels` | 10 | Cursor Models 池变化（%） |
-| `cursorTokenUsage.alertThreshold.otherModels` | 10 | Other Models 池变化（%） |
-| `cursorTokenUsage.alertThreshold.onDemandSpending` | 1 | On-Demand 花费变化（$） |
-| `cursorTokenUsage.alertThreshold.totalTokens` | 100000 | Token 总量变化 |
-
-### 状态栏与详情面板
+## 操作界面
 
 ```
 状态栏（个人）：     $(graph) C 42% · O 18%
@@ -238,47 +102,66 @@ Cursor 已改为按 token、双池计费（不再是旧的「fast-premium 请求
 └─────────────────────────────────────────────┘
 ```
 
-进度条颜色：绿 &lt; 40%、黄 &lt; 80%、橙 ≥ 80%、红 ≥ 100%。点击状态栏打开此面板。按钮：刷新、设置 Session Token、状态栏位置、配置提醒。
+进度条：绿 < 40%、黄 < 80%、橙 ≥ 80%、红 ≥ 100%。用量 ≥ 80% 状态栏警告底色，≥ 100% 错误底色。
 
-用量 ≥ 80% 状态栏警告底色；≥ 100% 错误底色。
+面板按钮：刷新、设置 Session Token、状态栏位置、配置提醒。
 
-### 命令
+## 配置
+
+| 配置项 | 默认 | 说明 |
+| --- | --- | --- |
+| `cursorTokenUsage.displayCount` | 5 | 详情面板最近用量条数 |
+| `cursorTokenUsage.pollingInterval` | 30 | 轮询间隔（秒，5–300） |
+| `cursorTokenUsage.showStatusBar` | true | 是否显示状态栏 |
+| `cursorTokenUsage.statusBarAlignment` | `right` | 状态栏位置：`left` / `right` |
+| `cursorTokenUsage.alertEnabled` | true | 启用用量变化提醒 |
+| `cursorTokenUsage.alertItems` | `newSession` `overallSpending` `cursorModels` `otherModels` `totalTokens` | 监控项 |
+| `cursorTokenUsage.alertThreshold.newSession` | 2 | 单次轮询新增调用数 |
+| `cursorTokenUsage.alertThreshold.overallSpending` | 1 | 套餐内花费变化（$） |
+| `cursorTokenUsage.alertThreshold.cursorModels` | 10 | Cursor Models 池变化（%） |
+| `cursorTokenUsage.alertThreshold.otherModels` | 10 | Other Models 池变化（%） |
+| `cursorTokenUsage.alertThreshold.onDemandSpending` | 1 | On-Demand 花费变化（$） |
+| `cursorTokenUsage.alertThreshold.totalTokens` | 100000 | Token 总量变化 |
+
+## 命令
 
 | 命令 | 作用 |
-|------|------|
+| --- | --- |
 | Show Token Usage Details | 打开详情面板（等同点击状态栏） |
 | Refresh Token Usage | 立即刷新 |
-| Set Session Token | 粘贴 / 清除 `WorkosCursorSessionToken` |
+| Set Session Token | 粘贴 / 清除 Session Token |
 | Set Polling Interval | 5–300 秒 |
 | Set Status Bar Side | 左 / 右 |
 | Configure Usage Alerts | 开关、监控项、阈值 |
 
-### 用量提醒
+## 用量提醒
 
-1. 命令面板 → **Cursor Token Usage: Configure Usage Alerts**，或详情面板里的提醒按钮
-2. 开启提醒 → 选择监控项 → 设置阈值
+1. 命令面板 → **Configure Usage Alerts**，或详情面板里的提醒按钮
+2. 开启提醒 → 选监控项 → 设阈值
 3. 可监控：新增调用、套餐内花费、Cursor Models %、Other Models %、On-Demand 花费、Token 总量
-4. 阈值设为 `0` 表示任何变化都会提醒
+4. 阈值 `0` 表示任何变化都提醒
 
-> 阈值在每次轮询时检查（间隔为 `pollingInterval` 秒）。数值是**两次轮询之间的变化量**，不是累计或绝对上限。例如 `onDemandSpending` 设为 `1.0`，表示两次成功轮询之间 On-Demand 花费增加 $1.00 或以上时触发。
+> 阈值看的是**两次轮询之间的变化量**，不是累计或绝对上限。例如 `onDemandSpending = 1.0`：两次成功轮询之间 On-Demand 增加 $1.00 或以上才触发。
 
-### 为什么不估算美元
+## 常见问题
 
-自助套餐的用量事件里，美元字段经常是 `$0`（`chargedCents: 0`），即使已经消耗了 token。用 token × 官网单价去乘，对不上账单：套餐额度、团队 / 企业折扣、Cursor Token Rate 都在服务端结算。
+**为什么不估算美元？**
 
-只有接口自己返回美分时才显示 `$`（例如 `individualUsage.overall` 的 used/limit，或 On-Demand used/limit）。Token 始终按 token 显示。
+自助套餐的用量事件里，美元经常是 `$0`（`chargedCents: 0`），即使已经消耗 token。用 token × 官网单价对不上账单：套餐额度、团队 / 企业折扣、Cursor Token Rate 都在服务端结算。只有接口自己返回美分时才显示 `$`。Token 始终按 token 显示。
 
-### 更新说明（1.0.6）
+**状态栏一直是 Set Token？**
 
-- 读不到会话时状态栏显示 **Set Token**
-- 英文 Token 单位用 K/M，中文满万仍用「万」
-- 窗口失焦时降低轮询频率
-- 按模型进度条显示占总用量比例
-- 趋势图：Token 为输入/输出/缓存堆叠柱 + 折线；费用仅在接口返回美分时绘制；可按模型筛选；悬停看明细；日期范围可选
-- 团队/企业：始终显示 On-Demand（接口美分，含 $0）
-- Webview 跟随 Cursor 浅色/深色主题（`--vscode-*` 变量）
+先确认本机已登录 Cursor，PATH 上有 Python 3。仍失败就用 **Set Session Token** 粘贴 `WorkosCursorSessionToken`。
 
-### 从源码构建
+**远程 SSH / WSL 读不到用量？**
+
+扩展必须装在**本机** Cursor，不要装到远端。它是 UI 扩展，只读本机 `state.vscdb`。
+
+**提醒太频繁 / 从不响？**
+
+阈值是相邻两次轮询的 delta。把 `pollingInterval` 和对应 `alertThreshold.*` 调大或调小；`0` 表示有变化就提醒。
+
+## 从源码构建
 
 ```bash
 npm install
@@ -286,4 +169,51 @@ npm run compile
 npx @vscode/vsce package --no-dependencies
 ```
 
-安装生成的 `.vsix` 后执行 **Developer: Reload Window**。
+安装生成的 `.vsix` 后执行 **Developer: Reload Window**。打 Open VSX 包请用 `vsce`，不要用系统 `zip`（带 extra fields 会被拒）。
+
+## 更新说明（1.0.6）
+
+- 读不到会话时状态栏显示 **Set Token**
+- 英文 Token 单位用 K/M，中文满万仍用「万」
+- 窗口失焦时降低轮询频率
+- 按模型进度条显示占总用量比例
+- 趋势图：Token 为输入 / 输出 / 缓存堆叠柱 + 折线；费用仅在接口返回美分时绘制；可按模型筛选；悬停看明细；日期范围可选
+- 团队 / 企业：始终显示 On-Demand（接口美分，含 $0）
+- Webview 跟随 Cursor 浅色 / 深色主题（`--vscode-*` 变量）
+
+## 参与贡献
+
+欢迎 Issue 和 Pull Request。
+
+1. Fork 本仓库
+2. `git checkout -b feature/your-feature`
+3. 提交更改
+4. 开 Pull Request
+
+## 开源协议
+
+[MIT](LICENSE)
+
+---
+
+Created by [Akito-Go](https://github.com/Akito-Go) — 觉得有用请点个 Star。
+
+---
+
+## English
+
+A VS Code / Cursor extension that shows **live Cursor token billing** on the status bar. Click it for a details panel: usage ring, per-model tokens, recent events, and a trend chart.
+
+Cursor bills by tokens in two pools (not the old “fast-premium requests + dollars” model). Display follows the account type returned by the API.
+
+**Install:** [Open VSX](https://open-vsx.org/extension/akitogo/cursor-token-usage) · [Marketplace](https://marketplace.visualstudio.com/items?itemName=akitogo.cursor-token-usage) · [VSIX v1.0.6](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.0.6)
+
+**Auth:** reads local `state.vscdb` (`cursorAuth/accessToken` + user id) and sends `WorkosCursorSessionToken` to `cursor.com` only. Needs Python 3 on PATH, or **Set Session Token**. Token goes to SecretStorage, never `settings.json`. This is a **UI extension** — install locally for SSH / WSL / Dev Containers.
+
+**Status bar:** individual `C xx% · O xx%`; team / enterprise included spend vs limit (API cents). Colors: green < 40%, yellow < 80%, orange ≥ 80%, red ≥ 100%.
+
+**Alerts:** delta between two polls, not a lifetime cap. `0` = any change.
+
+**Why no estimated $:** self-serve events often return `chargedCents: 0`. List-price × tokens will not match the invoice. `$` is shown only when the API returns cents.
+
+See the Chinese sections above for the full settings table, commands, and panel mockup.
