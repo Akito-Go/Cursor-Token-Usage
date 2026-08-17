@@ -44,7 +44,7 @@ cursor --install-extension akitogo.cursor-token-usage
 
 ### From a VSIX
 
-1. Download `cursor-token-usage-1.0.7.vsix` from [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.0.7)
+1. Download `cursor-token-usage-1.0.8.vsix` from [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.0.8)
 2. Drag it into Cursor, or `Cmd+Shift+P` (Windows: `Ctrl+Shift+P`) → `Extensions: Install from VSIX...`
 3. Run `Developer: Reload Window`
 
@@ -168,6 +168,11 @@ npx @vscode/vsce package --no-dependencies
 
 Install the resulting `.vsix`, then **Developer: Reload Window**.
 
+## Changelog (1.0.8)
+
+- Republish of 1.0.7: Open VSX reserved 1.0.7 after it was published and deleted
+- README header (EN / 中文) is centered as one block
+
 ## Changelog (1.0.7)
 
 - Store listing copy: Cursor token **billing** (not generic “usage”)
@@ -236,7 +241,7 @@ cursor --install-extension akitogo.cursor-token-usage
 
 #### 从 VSIX 安装
 
-1. 从 [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.0.7) 下载 `cursor-token-usage-1.0.7.vsix`
+1. 从 [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.0.8) 下载 `cursor-token-usage-1.0.8.vsix`
 2. 拖进 Cursor，或 `Cmd+Shift+P`（Windows：`Ctrl+Shift+P`）→ `Extensions: Install from VSIX...`
 3. 执行 `Developer: Reload Window`
 
@@ -359,6 +364,11 @@ npx @vscode/vsce package --no-dependencies
 ```
 
 安装生成的 `.vsix` 后执行 **Developer: Reload Window**。
+
+### 更新说明（1.0.8）
+
+- 重发 1.0.7：Open VSX 上 1.0.7 发过又删，版本号已占用不能再发
+- 中英文首页标题区整块居中
 
 ### 更新说明（1.0.7）
 
