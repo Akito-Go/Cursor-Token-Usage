@@ -1,6 +1,6 @@
 {
   "displayName": "Cursor Token Usage",
-  "description": "Status bar for Cursor token usage (individual pools or team spend)",
+  "description": "Status bar for Cursor token billing (individual pools or team spend)",
   "viewName": "Token Usage",
   "cmd.showDetails": "Show Token Usage Details",
   "cmd.refresh": "Refresh Token Usage",

@@ -1,6 +1,6 @@
 {
   "displayName": "Cursor Token Usage",
-  "description": "在状态栏显示 Cursor token 用量（个人双池或团队花费）",
+  "description": "在状态栏显示 Cursor token 计费用量（个人双池或团队花费）",
   "viewName": "Token Usage",
   "cmd.showDetails": "查看用量明细",
   "cmd.refresh": "刷新用量",

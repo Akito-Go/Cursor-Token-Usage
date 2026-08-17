@@ -42,7 +42,7 @@ cursor --install-extension akitogo.cursor-token-usage
 
 ### From a VSIX
 
-1. Download `cursor-token-usage-1.0.6.vsix` from [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.0.6)
+1. Download `cursor-token-usage-1.0.7.vsix` from [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.0.7)
 2. Drag it into Cursor, or `Cmd+Shift+P` (Windows: `Ctrl+Shift+P`) → `Extensions: Install from VSIX...`
 3. Run `Developer: Reload Window`
 
@@ -166,6 +166,11 @@ npx @vscode/vsce package --no-dependencies
 
 Install the resulting `.vsix`, then **Developer: Reload Window**.
 
+## Changelog (1.0.7)
+
+- Store listing copy: Cursor token **billing** (not generic “usage”)
+- README: Cursor IDE only; Open VSX install path; no VS Code Marketplace
+
 ## Changelog (1.0.6)
 
 - Status bar shows **Set Token** when the session is missing
@@ -225,7 +230,7 @@ cursor --install-extension akitogo.cursor-token-usage
 
 #### 从 VSIX 安装
 
-1. 从 [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.0.6) 下载 `cursor-token-usage-1.0.6.vsix`
+1. 从 [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.0.7) 下载 `cursor-token-usage-1.0.7.vsix`
 2. 拖进 Cursor，或 `Cmd+Shift+P`（Windows：`Ctrl+Shift+P`）→ `Extensions: Install from VSIX...`
 3. 执行 `Developer: Reload Window`
 
@@ -348,6 +353,11 @@ npx @vscode/vsce package --no-dependencies
 ```
 
 安装生成的 `.vsix` 后执行 **Developer: Reload Window**。
+
+### 更新说明（1.0.7）
+
+- 商店短描述改为 Cursor token **计费**（不再用泛称「用量」）
+- README：只写 Cursor IDE；安装走 Open VSX；去掉 VS Code Marketplace
 
 ### 更新说明（1.0.6）
 
