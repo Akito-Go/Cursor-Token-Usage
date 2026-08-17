@@ -1,6 +1,6 @@
-<p align="center">
-  <img src="icon.png" width="96" alt="Cursor Token Usage">
-</p>
+<div align="center">
+
+<img src="icon.png" width="96" alt="Cursor Token Usage">
 
 # Cursor Token Usage
 
@@ -11,6 +11,8 @@
 [![License](https://img.shields.io/github/license/Akito-Go/Cursor-Token-Usage)](LICENSE)
 
 [English](#cursor-token-usage) · [中文](#中文) · [Quick Start](#quick-start) · [Features](#features) · [Authentication](#authentication) · [UI](#ui) · [FAQ](#faq)
+
+</div>
 
 ---
 
@@ -196,11 +198,15 @@ Issues and pull requests are welcome.
 
 ---
 
+<div align="center">
+
 ## 中文
 
 **在状态栏显示 Cursor 现行 token 计费用量的 Cursor IDE 扩展**
 
 [English](#cursor-token-usage) · [中文](#中文) · [快速开始](#快速开始) · [核心特性](#核心特性) · [认证](#认证) · [界面](#操作界面) · [常见问题](#常见问题)
+
+</div>
 
 Cursor 已改为按 token、双池计费（不再是旧的「fast-premium 请求次数 + 美元」）。本扩展读取 dashboard 接口，按账号类型切换展示：个人看双池百分比，团队 / 企业看套餐内花费。
 
