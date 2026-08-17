@@ -4,10 +4,9 @@
 
 # Cursor Token Usage
 
-**A VS Code / Cursor extension that shows live Cursor token billing on the status bar**
+**A Cursor IDE extension that shows live Cursor token billing on the status bar**
 
 [![Release](https://img.shields.io/github/v/release/Akito-Go/Cursor-Token-Usage)](https://github.com/Akito-Go/Cursor-Token-Usage/releases)
-[![Marketplace](https://img.shields.io/visual-studio-marketplace/v/akitogo.cursor-token-usage?label=VS%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=akitogo.cursor-token-usage)
 [![Open VSX](https://img.shields.io/open-vsx/v/akitogo/cursor-token-usage)](https://open-vsx.org/extension/akitogo/cursor-token-usage)
 [![License](https://img.shields.io/github/license/Akito-Go/Cursor-Token-Usage)](LICENSE)
 
@@ -33,12 +32,9 @@ Cursor now bills by tokens in two pools (not the old “fast-premium requests + 
 
 ## Quick Start
 
-### From a marketplace
+### From Open VSX
 
-- [Open VSX](https://open-vsx.org/extension/akitogo/cursor-token-usage) (Cursor’s extension marketplace)
-- [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=akitogo.cursor-token-usage)
-
-Search `Cursor Token Usage`, or:
+Install from [Open VSX](https://open-vsx.org/extension/akitogo/cursor-token-usage) (Cursor’s extension marketplace). Search `Cursor Token Usage`, or:
 
 ```bash
 cursor --install-extension akitogo.cursor-token-usage
@@ -93,11 +89,11 @@ Details panel
 │ On-Demand       $5.74                       │
 │                                             │
 │ By Model                                    │
-│ claude-4.6-opus  ████████████████    80.1万  │
-│ gpt-5            ██████░░░░░░░░░░    12.4万  │
+│ claude-4.6-opus  ████████████████     801K  │
+│ gpt-5            ██████░░░░░░░░░░     124K  │
 │                                             │
 │ Recent Usage                                │
-│ 08-13 21:04  Claude 4.6 Opus  Included  2.1万│
+│ 08-13 21:04  Claude 4.6 Opus  Included  21K │
 └─────────────────────────────────────────────┘
 ```
 
@@ -197,7 +193,7 @@ Issues and pull requests are welcome.
 
 ## 中文
 
-**在状态栏显示 Cursor 现行 token 计费用量的 VS Code / Cursor 扩展**
+**在状态栏显示 Cursor 现行 token 计费用量的 Cursor IDE 扩展**
 
 [English](#cursor-token-usage) · [中文](#中文) · [快速开始](#快速开始) · [核心特性](#核心特性) · [认证](#认证) · [界面](#操作界面) · [常见问题](#常见问题)
 
@@ -219,12 +215,9 @@ Cursor 已改为按 token、双池计费（不再是旧的「fast-premium 请求
 
 ### 快速开始
 
-#### 从商店安装
+#### 从 Open VSX 安装
 
-- [Open VSX](https://open-vsx.org/extension/akitogo/cursor-token-usage)（Cursor 扩展市场）
-- [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=akitogo.cursor-token-usage)
-
-搜 `Cursor Token Usage`，或：
+从 [Open VSX](https://open-vsx.org/extension/akitogo/cursor-token-usage)（Cursor 扩展市场）安装。搜 `Cursor Token Usage`，或：
 
 ```bash
 cursor --install-extension akitogo.cursor-token-usage
