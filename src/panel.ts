@@ -52,6 +52,10 @@ export class UsagePanel {
     this.panel.title = vscode.l10n.t("Cursor Token Usage");
     this.panel.webview.html = renderHtml(this.panel.webview, this.getSnapshot(), this.getError());
   }
+
+  markStale(): void {
+    void this.panel.webview.postMessage({ command: "stale" });
+  }
 }
 
 function escapeHtml(value: string): string {
@@ -141,6 +145,25 @@ function dayKey(ts: number): string {
   return `${y}-${m}-${day}`;
 }
 
+function isoDay(value: string): string {
+  if (!value) return "";
+  const ms = Date.parse(value);
+  if (!Number.isFinite(ms)) return "";
+  return dayKey(ms);
+}
+
+function trendRange(snapshot: UsageSnapshot, eventDays: string[]): { minDay: string; maxDay: string } {
+  const today = dayKey(Date.now());
+  const cycleStart = isoDay(snapshot.billingCycleStart);
+  const cycleEnd = isoDay(snapshot.billingCycleEnd);
+  const firstEvent = eventDays[0] || today;
+  const lastEvent = eventDays[eventDays.length - 1] || today;
+  const minDay = cycleStart || firstEvent;
+  const maxDay = cycleEnd && cycleEnd < today ? cycleEnd : today;
+  if (minDay <= maxDay) return { minDay, maxDay };
+  return { minDay: firstEvent, maxDay: lastEvent };
+}
+
 function renderTrend(snapshot: UsageSnapshot): string {
   const points = snapshot.events
     .filter((e) => e.timestamp)
@@ -157,8 +180,9 @@ function renderTrend(snapshot: UsageSnapshot): string {
     return `<p class="empty">${escapeHtml(vscode.l10n.t("Not enough event data for a trend"))}</p>`;
   }
   const models = [...new Set(points.map((p) => p.model))].sort();
-  const days = [...new Set(points.map((p) => p.day))].sort();
-  const payload = JSON.stringify({ points, models, minDay: days[0], maxDay: days[days.length - 1] }).replace(/</g, "\\u003c");
+  const eventDays = [...new Set(points.map((p) => p.day))].sort();
+  const { minDay, maxDay } = trendRange(snapshot, eventDays);
+  const payload = JSON.stringify({ points, models, minDay, maxDay }).replace(/</g, "\\u003c");
   const modelOpts = [`<option value="">${escapeHtml(vscode.l10n.t("All models"))}</option>`]
     .concat(models.map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(shortenModel(m))}</option>`))
     .join("");
@@ -169,20 +193,14 @@ function renderTrend(snapshot: UsageSnapshot): string {
         <button type="button" class="tab" data-metric="cost">${escapeHtml(vscode.l10n.t("Cost"))}</button>
       </div>
       <div class="trend-filters">
-        <label>${escapeHtml(vscode.l10n.t("From"))} <input type="date" id="trend-from" min="${days[0]}" max="${days[days.length - 1]}" value="${days[0]}"></label>
-        <label>${escapeHtml(vscode.l10n.t("To"))} <input type="date" id="trend-to" min="${days[0]}" max="${days[days.length - 1]}" value="${days[days.length - 1]}"></label>
+        <label>${escapeHtml(vscode.l10n.t("From"))} <input type="date" id="trend-from" min="${minDay}" max="${maxDay}" value="${minDay}"></label>
+        <label>${escapeHtml(vscode.l10n.t("To"))} <input type="date" id="trend-to" min="${minDay}" max="${maxDay}" value="${maxDay}"></label>
         <select id="trend-model">${modelOpts}</select>
       </div>
     </div>
-    <p class="trend-range" id="trend-range">${escapeHtml(vscode.l10n.t("Detail range: {0} ~ {1} | Metric: {2}", days[0], days[days.length - 1], vscode.l10n.t("Token")))}</p>
+    <p class="trend-range" id="trend-range">${escapeHtml(vscode.l10n.t("Detail range: {0} ~ {1} | Metric: {2}", minDay, maxDay, vscode.l10n.t("Token")))}</p>
     <div id="trend-chart" class="chart-wrap"><div id="chart-tip" class="chart-tip" hidden></div></div>
-    <p class="legend">
-      <span class="dot in"></span>${escapeHtml(vscode.l10n.t("Input"))}
-      <span class="dot out"></span>${escapeHtml(vscode.l10n.t("Output"))}
-      <span class="dot cache"></span>${escapeHtml(vscode.l10n.t("Cache"))}
-      <span class="dot line"></span>${escapeHtml(vscode.l10n.t("Trend line"))}
-      <span class="dot cost"></span>${escapeHtml(vscode.l10n.t("Cost"))}
-    </p>
+    <p class="legend" id="trend-legend"></p>
     <script type="application/json" id="trend-data">${payload}</script>
     <span hidden id="trend-i18n"
       data-token="${escapeHtml(vscode.l10n.t("Token"))}"
@@ -194,6 +212,7 @@ function renderTrend(snapshot: UsageSnapshot): string {
       data-input="${escapeHtml(vscode.l10n.t("Input"))}"
       data-output="${escapeHtml(vscode.l10n.t("Output"))}"
       data-cache="${escapeHtml(vscode.l10n.t("Cache"))}"
+      data-line="${escapeHtml(vscode.l10n.t("Trend line"))}"
       data-total="${escapeHtml(vscode.l10n.t("Total"))}"></span>`;
 }
 
@@ -398,7 +417,7 @@ h2 { margin: 0 0 8px; font-size: 12px; color: var(--muted); font-weight: 600; le
   box-shadow: 0 6px 18px color-mix(in srgb, #000 18%, transparent);
 }
 .chart-tip strong { display: block; margin-bottom: 4px; }
-.legend { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; color: var(--muted); font-size: 12px; margin: 10px 0 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; margin: 10px 0 0; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 99px; margin-right: 4px; }
 .dot.in { background: var(--in); }
 .dot.out { background: var(--out); }
@@ -406,6 +425,11 @@ h2 { margin: 0 0 8px; font-size: 12px; color: var(--muted); font-weight: 600; le
 .dot.line { background: var(--linec); }
 .dot.cost { background: var(--costc); }
 .chart-empty { color: var(--muted); padding: 40px 12px; text-align: center; }
+.stale-banner {
+  margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; font-size: 12px;
+  background: color-mix(in srgb, var(--warn) 16%, transparent);
+  color: var(--text); border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+}
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 8px 4px; border-bottom: 1px solid var(--line); }
 th { color: var(--muted); font-weight: 500; }
@@ -416,9 +440,16 @@ th { color: var(--muted); font-weight: 500; }
 </style>
 </head>
 <body>
-<div class="wrap">${body}</div>
+<div class="wrap">
+<p class="stale-banner" id="stale-banner" hidden>${escapeHtml(vscode.l10n.t("Status bar updated. Click Refresh for details."))}</p>
+${body}
+</div>
 <script nonce="${nonce}">
 const vscode = acquireVsCodeApi();
+window.addEventListener("message", (event) => {
+  const banner = document.getElementById("stale-banner");
+  if (banner && event.data && event.data.command === "stale") banner.hidden = false;
+});
 for (const btn of document.querySelectorAll("[data-cmd]")) {
   btn.addEventListener("click", () => vscode.postMessage({ command: btn.dataset.cmd }));
 }
@@ -436,17 +467,26 @@ for (const btn of document.querySelectorAll("[data-cmd]")) {
   const saved = (typeof vscode.getState === "function" && vscode.getState()) || {};
   let metric = saved.metric === "cost" ? "cost" : "token";
   let model = typeof saved.model === "string" ? saved.model : "";
-  let from = saved.from && saved.from >= minDay && saved.from <= maxDay ? saved.from : minDay;
-  let to = saved.to && saved.to >= minDay && saved.to <= maxDay ? saved.to : maxDay;
-  if (from > to) { from = minDay; to = maxDay; }
-
-  function persist() {
-    if (typeof vscode.setState === "function") vscode.setState({ metric, model, from, to });
-  }
   function isoAdd(iso, n) {
     const parts = iso.split("-").map(Number);
     const dt = new Date(parts[0], parts[1] - 1, parts[2] + n);
     return dt.getFullYear() + "-" + String(dt.getMonth() + 1).padStart(2, "0") + "-" + String(dt.getDate()).padStart(2, "0");
+  }
+  function clampDay(d) {
+    if (!d) return minDay;
+    if (minDay && d < minDay) return minDay;
+    if (maxDay && d > maxDay) return maxDay;
+    return d;
+  }
+  function last7() {
+    return clampDay(isoAdd(maxDay, -6));
+  }
+  let from = saved.from && saved.from >= minDay && saved.from <= maxDay ? saved.from : last7();
+  let to = saved.to && saved.to >= minDay && saved.to <= maxDay ? saved.to : maxDay;
+  if (from > to) { from = last7(); to = maxDay; }
+
+  function persist() {
+    if (typeof vscode.setState === "function") vscode.setState({ metric, model, from, to });
   }
   function eachDay(a, b) {
     const out = [];
@@ -533,8 +573,26 @@ for (const btn of document.querySelectorAll("[data-cmd]")) {
       + outputL + ": " + fmtNum(d.output, false) + "<br>"
       + cacheL + ": " + fmtNum(d.cache, false);
   }
+  function updateLegend() {
+    const el = document.getElementById("trend-legend");
+    if (!el) return;
+    const inputL = (i18n && i18n.dataset.input) || "Input";
+    const outputL = (i18n && i18n.dataset.output) || "Output";
+    const cacheL = (i18n && i18n.dataset.cache) || "Cache";
+    const lineL = (i18n && i18n.dataset.line) || "Trend";
+    const costL = (i18n && i18n.dataset.cost) || "Cost";
+    if (metric === "cost") {
+      el.innerHTML = '<span class="dot cost"></span>' + costL + ' <span class="dot line"></span>' + lineL;
+    } else {
+      el.innerHTML = '<span class="dot in"></span>' + inputL
+        + ' <span class="dot out"></span>' + outputL
+        + ' <span class="dot cache"></span>' + cacheL
+        + ' <span class="dot line"></span>' + lineL;
+    }
+  }
   function render() {
     persist();
+    updateLegend();
     const days = aggregate();
     const rangeEl = document.getElementById("trend-range");
     const metricLabel = metric === "cost" ? ((i18n && i18n.dataset.cost) || "Cost") : ((i18n && i18n.dataset.token) || "Token");
@@ -554,7 +612,8 @@ for (const btn of document.querySelectorAll("[data-cmd]")) {
     const maxY = niceMax(maxRaw);
     const n = days.length;
     const slot = plotW / n;
-    const barW = Math.min(28, Math.max(8, slot * 0.55));
+    const barW = Math.min(28, Math.max(6, slot * 0.55));
+    const labelStep = n > 14 ? Math.ceil(n / 8) : 1;
     const yTicks = [0, 0.25, 0.5, 0.75, 1].map((t) => maxY * t);
     let grid = "";
     for (const t of yTicks) {
@@ -583,11 +642,11 @@ for (const btn of document.querySelectorAll("[data-cmd]")) {
       }
       const hitX = L + slot * i;
       hits += '<rect class="hit" data-i="' + i + '" x="' + hitX + '" y="' + T + '" width="' + slot + '" height="' + plotH + '" fill="transparent"/>';
-      bars += '<text x="' + (x + barW / 2) + '" y="' + (H - 10) + '" text-anchor="middle" font-size="10" fill="var(--muted)">' + d.day.slice(5) + "</text>";
+      if (i % labelStep === 0 || i === n - 1) {
+        bars += '<text x="' + (x + barW / 2) + '" y="' + (H - 10) + '" text-anchor="middle" font-size="10" fill="var(--muted)">' + d.day.slice(5) + "</text>";
+      }
     });
-    const line = metric === "token"
-      ? '<path d="' + spline(linePts) + '" fill="none" stroke="var(--linec)" stroke-width="2" pointer-events="none"/>'
-      : "";
+    const line = '<path d="' + spline(linePts) + '" fill="none" stroke="var(--linec)" stroke-width="2" pointer-events="none"/>';
     chartEl.innerHTML = '<div id="chart-tip" class="chart-tip" hidden></div><svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet">' + grid + bars + line + hits + "</svg>";
     chartEl.querySelectorAll(".hit").forEach((el) => {
       const i = Number(el.getAttribute("data-i"));

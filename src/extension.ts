@@ -18,6 +18,7 @@ let tracker: UsageTracker;
 let mainStatusBar: vscode.StatusBarItem;
 let extensionContext: vscode.ExtensionContext;
 let windowFocused = true;
+let suppressStale = false;
 
 const STATUS_ICON = "$(graph)";
 
@@ -30,7 +31,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   tracker.onUpdate = () => {
     updateStatusBar();
-    UsagePanel.current?.refresh();
+    if (!suppressStale && !tracker.lastError) UsagePanel.current?.markStale();
   };
   tracker.onAlert = (alerts) => showAlerts(alerts);
 
@@ -71,8 +72,14 @@ function startPolling(): void {
 }
 
 async function refresh(): Promise<void> {
+  suppressStale = true;
   mainStatusBar.text = `${STATUS_ICON} …`;
-  await tracker.poll(true);
+  try {
+    await tracker.poll(true, { fullEvents: !!UsagePanel.current });
+    UsagePanel.current?.refresh();
+  } finally {
+    suppressStale = false;
+  }
 }
 
 function recreateStatusBar(): void {
@@ -208,6 +215,7 @@ function showDetails(): void {
       if (command === "alerts") void configureAlerts();
     },
   );
+  void refresh();
 }
 
 async function setToken(): Promise<void> {

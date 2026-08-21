@@ -70,7 +70,7 @@ async function getSessionToken(): Promise<{ userId: string; cookieValue: string 
   return null;
 }
 
-export async function fetchUsage(): Promise<FetchResult> {
+export async function fetchUsage(fullEvents = false): Promise<FetchResult> {
   const session = await getSessionToken();
   if (!session) {
     return { snapshot: null, error: vscode.l10n.t("Unable to get Session Token"), eventsError: false, aggError: false };
@@ -83,9 +83,6 @@ export async function fetchUsage(): Promise<FetchResult> {
   }
 
   const parsed = parseSummary(summary);
-  const config = vscode.workspace.getConfiguration("cursorTokenUsage");
-  const rawCount = config.get<number>("displayCount", 5);
-  const displayCount = Number.isFinite(rawCount) ? Math.max(1, Math.min(50, rawCount)) : 5;
 
   const startMs = parsed.billingCycleStart
     ? Date.parse(parsed.billingCycleStart)
@@ -94,7 +91,7 @@ export async function fetchUsage(): Promise<FetchResult> {
 
   const [aggResult, eventsResult] = await Promise.all([
     fetchAggregations(session.cookieValue, startMs, endMs),
-    fetchUsageEvents(session.cookieValue, Math.max(displayCount, 100), startMs, endMs),
+    fetchUsageEvents(session.cookieValue, startMs, endMs, fullEvents ? EVENT_MAX_PAGES : 1),
   ]);
 
   const aggregations = aggResult.aggs;
@@ -108,6 +105,7 @@ export async function fetchUsage(): Promise<FetchResult> {
       ...parsed,
       aggregations,
       events: eventsResult.events,
+      eventsComplete: fullEvents,
       totalTokens,
     },
     error: null,
@@ -146,7 +144,7 @@ function parseCents(value: unknown): number | null {
  * Team/Enterprise: individualUsage.overall used/limit (cents) → $ used/$ limit.
  * Never multiply tokens by list prices; only display cents the API returns.
  */
-function parseSummary(data: Record<string, unknown>): Omit<UsageSnapshot, "timestamp" | "aggregations" | "events" | "totalTokens"> {
+function parseSummary(data: Record<string, unknown>): Omit<UsageSnapshot, "timestamp" | "aggregations" | "events" | "eventsComplete" | "totalTokens"> {
   const individual = (data.individualUsage as Record<string, unknown> | undefined) || {};
   const plan = (individual.plan as Record<string, unknown> | undefined) || {};
   const overall = (individual.overall as Record<string, unknown> | undefined) || {};
@@ -242,42 +240,67 @@ async function fetchAggregations(
   return { aggs, error: false };
 }
 
+const EVENT_PAGE_SIZE = 100;
+const EVENT_MAX_PAGES = 30;
+
+function mapUsageEvent(e: unknown): UsageEvent {
+  const row = (e || {}) as Record<string, unknown>;
+  const tok = (row.tokenUsage as Record<string, unknown> | undefined) || {};
+  const input = toInt(tok.inputTokens);
+  const output = toInt(tok.outputTokens);
+  const cacheWrite = toInt(tok.cacheWriteTokens);
+  const cacheRead = toInt(tok.cacheReadTokens);
+  return {
+    timestamp: toInt(row.timestamp),
+    model: String(row.model || "unknown"),
+    kind: String(row.kind || ""),
+    inputTokens: input,
+    outputTokens: output,
+    cacheWriteTokens: cacheWrite,
+    cacheReadTokens: cacheRead,
+    totalTokens: input + output + cacheWrite + cacheRead,
+    totalCents: parseCents(tok.totalCents) ?? parseCents(row.chargedCents) ?? 0,
+  };
+}
+
 async function fetchUsageEvents(
   cookieValue: string,
-  count: number,
   startMs: number,
   endMs: number,
+  maxPages = EVENT_MAX_PAGES,
 ): Promise<{ events: UsageEvent[]; error: boolean }> {
-  const data = await httpPost(
-    "https://cursor.com/api/dashboard/get-filtered-usage-events",
-    { startDate: startMs, endDate: endMs, page: 1, pageSize: count },
-    cookieValue,
-  );
-  const rows = data?.usageEventsDisplay;
-  if (!Array.isArray(rows)) {
-    log("get-filtered-usage-events 无数据");
-    return { events: [], error: true };
+  const pageSize = EVENT_PAGE_SIZE;
+  const events: UsageEvent[] = [];
+  let page = 1;
+  let truncated = false;
+  const pageLimit = Math.max(1, Math.min(EVENT_MAX_PAGES, maxPages));
+
+  while (page <= pageLimit) {
+    const data = await httpPost(
+      "https://cursor.com/api/dashboard/get-filtered-usage-events",
+      { startDate: startMs, endDate: endMs, page, pageSize },
+      cookieValue,
+    );
+    const rows = data?.usageEventsDisplay;
+    if (!Array.isArray(rows)) {
+      if (page === 1) {
+        log("get-filtered-usage-events 无数据");
+        return { events: [], error: true };
+      }
+      log(`get-filtered-usage-events 第 ${page} 页失败，使用已拉取的 ${events.length} 条`);
+      return { events, error: false };
+    }
+    events.push(...rows.map(mapUsageEvent));
+    const total = toInt(data?.totalUsageEventsCount);
+    log(`获取到第 ${page} 页 ${rows.length} 条用量事件 (累计 ${events.length}${total > 0 ? `/${total}` : ""})`);
+    if (rows.length < pageSize) break;
+    if (total > 0 && events.length >= total) break;
+    page += 1;
+    if (page > pageLimit) truncated = true;
   }
-  log(`获取到 ${rows.length} 条用量事件 (总计 ${data?.totalUsageEventsCount ?? "?"})`);
-  const events: UsageEvent[] = rows.map((e: unknown) => {
-    const row = (e || {}) as Record<string, unknown>;
-    const tok = (row.tokenUsage as Record<string, unknown> | undefined) || {};
-    const input = toInt(tok.inputTokens);
-    const output = toInt(tok.outputTokens);
-    const cacheWrite = toInt(tok.cacheWriteTokens);
-    const cacheRead = toInt(tok.cacheReadTokens);
-    return {
-      timestamp: toInt(row.timestamp),
-      model: String(row.model || "unknown"),
-      kind: String(row.kind || ""),
-      inputTokens: input,
-      outputTokens: output,
-      cacheWriteTokens: cacheWrite,
-      cacheReadTokens: cacheRead,
-      totalTokens: input + output + cacheWrite + cacheRead,
-      totalCents: parseCents(tok.totalCents) ?? parseCents(row.chargedCents) ?? 0,
-    };
-  });
+  if (truncated) {
+    log(`事件达到页数上限 ${pageLimit}（${EVENT_PAGE_SIZE}/页），已截断`);
+  }
   return { events, error: false };
 }
 

@@ -38,6 +38,7 @@ export interface UsageSnapshot {
   onDemandLimitCents: number | null;
   aggregations: ModelAgg[];
   events: UsageEvent[];
+  eventsComplete: boolean;
   totalTokens: number;
 }
 

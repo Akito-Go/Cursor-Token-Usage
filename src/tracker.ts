@@ -16,7 +16,9 @@ export class UsageTracker {
   private _polling = false;
   private _pollStartTime = 0;
   private _pollCount = 0;
-  private _activePollId = 0;
+  private _queuedFull = false;
+  private _idleWaiters: Array<() => void> = [];
+  private _running: Promise<boolean> | null = null;
 
   set onUpdate(callback: () => void) {
     this._onUpdate = callback;
@@ -50,26 +52,61 @@ export class UsageTracker {
     return this._lastSuccessTime;
   }
 
-  async poll(force = false): Promise<boolean> {
+  private notifyIdle(): void {
+    const waiters = this._idleWaiters.splice(0);
+    for (const wait of waiters) wait();
+  }
+
+  private waitIdle(): Promise<void> {
+    if (!this._polling && !this._running) return Promise.resolve();
+    return new Promise((resolve) => this._idleWaiters.push(resolve));
+  }
+
+  async poll(force = false, opts?: { fullEvents?: boolean }): Promise<boolean> {
+    const fullEvents = !!opts?.fullEvents;
+    if (fullEvents) this._queuedFull = true;
+
+    if (this._running) {
+      const elapsed = Date.now() - this._pollStartTime;
+      if (!force && elapsed <= 120000) {
+        log.appendLine(`[${new Date().toISOString()}] poll SKIPPED${fullEvents ? " (queued full)" : ""}`);
+        return false;
+      }
+      if (force) {
+        log.appendLine(`[${new Date().toISOString()}] poll waiting for in-flight${fullEvents ? " then full" : ""}`);
+        await this.waitIdle();
+        return this.poll(false, { fullEvents: fullEvents || this._queuedFull });
+      }
+      log.appendLine(`[${new Date().toISOString()}] poll 上次轮询超时，强制重置`);
+      this._pollCount++;
+      this._running = null;
+      this._polling = false;
+      this.notifyIdle();
+    }
+
+    const runFull = fullEvents || this._queuedFull;
+    this._queuedFull = false;
+    const task = this.runPoll(runFull);
+    this._running = task.finally(() => {
+      if (this._running === task) this._running = null;
+      this._polling = false;
+      const hasWaiters = this._idleWaiters.length > 0;
+      const followUp = this._queuedFull && !hasWaiters && !runFull;
+      this.notifyIdle();
+      if (followUp) void this.poll(false, { fullEvents: true });
+    });
+    return task;
+  }
+
+  private async runPoll(fullEvents: boolean): Promise<boolean> {
     this._pollCount++;
     const pollId = this._pollCount;
     const ts = new Date().toISOString();
-    if (this._polling) {
-      const elapsed = Date.now() - this._pollStartTime;
-      if (elapsed > 120000) {
-        log.appendLine(`[${ts}] poll#${pollId} 上次轮询超时，强制重置`);
-        this._polling = false;
-      } else {
-        log.appendLine(`[${ts}] poll#${pollId} SKIPPED`);
-        return false;
-      }
-    }
-    this._activePollId = pollId;
     this._polling = true;
     this._pollStartTime = Date.now();
     try {
       const result = await Promise.race<FetchResult>([
-        fetchUsage(),
+        fetchUsage(fullEvents),
         new Promise((resolve) =>
           setTimeout(
             () => resolve({ snapshot: null, error: vscode.l10n.t("Timed out fetching usage"), eventsError: false, aggError: false }),
@@ -84,7 +121,10 @@ export class UsageTracker {
         this._onUpdate?.();
         return false;
       }
-      if (pollId !== this._activePollId) return false;
+      if (pollId !== this._pollCount) {
+        log.appendLine(`[${ts}] poll#${pollId} 已过期，丢弃结果`);
+        return false;
+      }
 
       const wasRecovering = this._consecutiveFailures > 0;
       this._lastError = null;
@@ -94,9 +134,16 @@ export class UsageTracker {
       this._aggError = result.aggError;
 
       const prev = this._lastSnapshot;
-      const snapshot = result.snapshot;
+      let snapshot = result.snapshot;
+      if (prev?.eventsComplete && !snapshot.eventsComplete) {
+        const seen = new Set(prev.events.map((e) => `${e.timestamp}|${e.model}|${e.kind}`));
+        const extras = snapshot.events.filter((e) => !seen.has(`${e.timestamp}|${e.model}|${e.kind}`));
+        const events = extras.length > 0 ? [...extras, ...prev.events] : prev.events;
+        snapshot = { ...snapshot, events, eventsComplete: true };
+        log.appendLine(`[${ts}] poll#${pollId} lite 合并 ${extras.length} 条新事件，共 ${events.length} 条`);
+      }
       log.appendLine(
-        `[${ts}] poll#${pollId} 成功 C=${snapshot.cursorModelsPercent}% O=${snapshot.otherModelsPercent}% tokens=${snapshot.totalTokens}`,
+        `[${ts}] poll#${pollId} 成功 full=${snapshot.eventsComplete} events=${snapshot.events.length} C=${snapshot.cursorModelsPercent}% O=${snapshot.otherModelsPercent}% tokens=${snapshot.totalTokens}`,
       );
       this._lastSnapshot = snapshot;
       if (prev && !wasRecovering) this.checkAlerts(prev, snapshot);
@@ -104,10 +151,7 @@ export class UsageTracker {
       return true;
     } catch (err) {
       log.appendLine(`[${ts}] poll#${pollId} 异常: ${err}`);
-      if (force) this._onUpdate?.();
       return false;
-    } finally {
-      this._polling = false;
     }
   }
 
@@ -117,7 +161,7 @@ export class UsageTracker {
     const items = config.get<string[]>("alertItems", ["newSession", "cursorModels", "otherModels", "totalTokens"]);
     const alerts: UsageAlert[] = [];
 
-    if (items.includes("newSession")) {
+    if (items.includes("newSession") && prev.eventsComplete && curr.eventsComplete) {
       const prevTs = new Set(prev.events.map((e) => e.timestamp));
       const newCount = curr.events.filter((e) => !prevTs.has(e.timestamp)).length;
       const threshold = config.get("alertThreshold.newSession", 2);

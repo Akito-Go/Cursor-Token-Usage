@@ -1,6 +1,6 @@
 {
   "displayName": "Cursor Token Usage",
-  "description": "Status bar for Cursor token billing (individual pools or team spend)",
+  "description": "Live Cursor token billing on the status bar (individual two-pool % or team spend). Details panel with trend; $ only from API cents, no list-price estimate.",
   "viewName": "Token Usage",
   "cmd.showDetails": "Show Token Usage Details",
   "cmd.refresh": "Refresh Token Usage",
@@ -9,7 +9,7 @@
   "cmd.setStatusBarAlignment": "Set Status Bar Side",
   "cmd.configureAlerts": "Configure Usage Alerts",
   "config.title": "Cursor Token Usage",
-  "config.displayCount": "How many recent usage events to fetch",
+  "config.displayCount": "How many recent usage rows to show in the details panel (does not limit the trend chart)",
   "config.pollingInterval": "Refresh interval in seconds",
   "config.showStatusBar": "Show usage on the status bar",
   "config.statusBarAlignment": "Status bar side: left or right",

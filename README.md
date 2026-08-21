@@ -27,10 +27,12 @@ Cursor now bills by tokens in two pools (not the old “fast-premium requests + 
 **Also:**
 
 - Auto refresh, default 30 seconds; slower while the window is unfocused
+- Status-bar polls are light (one page of events); opening or refreshing the details panel paginates the full billing-cycle list
 - English / Chinese UI, follows the editor language
 - Universal VSIX for macOS / Windows / Linux; reads the local Cursor session (`state.vscdb`)
 - UI extension (`extensionKind: ui`): on SSH Remote, WSL, or Dev Containers it still reads the **local** login
 - Shows `$` only when the API returns cents; does not estimate invoices from list prices
+- Trend chart defaults to the last 7 days; From / To can span months within the billing cycle
 
 ## Quick Start
 
@@ -44,7 +46,7 @@ cursor --install-extension akitogo.cursor-token-usage
 
 ### From a VSIX
 
-1. Download `cursor-token-usage-1.0.8.vsix` from [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.0.8)
+1. Download `cursor-token-usage-1.0.9.vsix` from [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.0.9)
 2. Drag it into Cursor, or `Cmd+Shift+P` (Windows: `Ctrl+Shift+P`) → `Extensions: Install from VSIX...`
 3. Run `Developer: Reload Window`
 
@@ -103,11 +105,13 @@ Bar colors: green < 40%, yellow < 80%, orange ≥ 80%, red ≥ 100%. Usage ≥ 8
 
 Panel buttons: Refresh, Set Session Token, status bar side, Configure Alerts.
 
+Trend chart: Token (stacked input / output / cache + line) or Cost (bars + line). Date inputs are bounded by the billing cycle and default to the last 7 days. The Cost tab only draws when the API returns cents. Background polls update the status bar only; if the panel is open, a banner asks you to Refresh for details.
+
 ## Configuration
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `cursorTokenUsage.displayCount` | 5 | Recent usage rows in the details panel |
+| `cursorTokenUsage.displayCount` | 5 | Recent usage rows in the details panel (does not limit the trend chart) |
 | `cursorTokenUsage.pollingInterval` | 30 | Poll interval in seconds (5–300) |
 | `cursorTokenUsage.showStatusBar` | true | Show the status bar item |
 | `cursorTokenUsage.statusBarAlignment` | `right` | Status bar side: `left` / `right` |
@@ -144,7 +148,7 @@ Panel buttons: Refresh, Set Session Token, status bar side, Configure Alerts.
 
 **Why not estimate dollars?**
 
-Self-serve usage events often return `$0` (`chargedCents: 0`) even when tokens were used. Token × public list price will not match the invoice: included quota, Team / Enterprise discounts, and Cursor Token Rate are applied server-side. `$` is shown only when the API returns cents. Token counts are always tokens.
+Self-serve usage events often return `$0` (`chargedCents: 0`) even when tokens were used. Token × public list price will not match the invoice: included quota, Team / Enterprise discounts, and Cursor Token Rate are applied server-side. `$` is shown only when the API returns cents. Token counts are always tokens. The **Cost** tab stays empty in that case; use **Token**.
 
 **Status bar stuck on Set Token?**
 
@@ -158,6 +162,10 @@ Install the extension in **local** Cursor, not on the remote host. It is a UI ex
 
 Thresholds are the delta between adjacent polls. Raise or lower `pollingInterval` and the matching `alertThreshold.*`. `0` means any change.
 
+**Details panel looks stale?**
+
+The status bar refreshes on the polling interval. The panel keeps the current date range and chart until you click **Refresh** (or reopen it), so the date picker is not reset. A banner appears when the status bar has newer data.
+
 ## Build from Source
 
 ```bash
@@ -167,6 +175,16 @@ npx @vscode/vsce package --no-dependencies
 ```
 
 Install the resulting `.vsix`, then **Developer: Reload Window**.
+
+## Changelog (1.0.9)
+
+- Paginate usage events (100 per page, up to 30 pages) when the details panel is opened or refreshed
+- Status-bar polls stay light (one page) and merge new events into the full list; they never replace a completed event list with a shorter one
+- Opening or refreshing the panel waits for an in-flight poll instead of skipping the full fetch
+- Date picker `min` / `max` follow the billing cycle; default chart window is the last 7 days; From / To can span months
+- Background polling does not rebuild the panel; a banner asks you to Refresh when the status bar has newer data
+- Cost chart also draws a trend line; the legend switches with the Token / Cost tab and is centered
+- Cost tab stays empty when the API returns no cents (no list-price estimate)
 
 ## Changelog (1.0.8)
 
@@ -224,10 +242,12 @@ Cursor 已改为按 token、双池计费（不再是旧的「fast-premium 请求
 **更多亮点：**
 
 - 自动刷新，默认 30 秒；窗口失焦时降低频率
+- 状态栏轮询只拉一页事件；打开或刷新详情面板时才翻页拉全量账单周期
 - 中 / 英界面，跟随编辑器语言
 - macOS / Windows / Linux 通用 VSIX，自动读本机 Cursor 会话（`state.vscdb`）
 - UI 扩展（`extensionKind: ui`）：SSH Remote、WSL、Dev Containers 下仍读**本机**登录
 - 只在接口返回美分时显示 `$`，不用官网单价估算账单
+- 趋势图默认近 7 天；From / To 可在账单周期内跨月
 
 ### 快速开始
 
@@ -241,7 +261,7 @@ cursor --install-extension akitogo.cursor-token-usage
 
 #### 从 VSIX 安装
 
-1. 从 [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.0.8) 下载 `cursor-token-usage-1.0.8.vsix`
+1. 从 [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.0.9) 下载 `cursor-token-usage-1.0.9.vsix`
 2. 拖进 Cursor，或 `Cmd+Shift+P`（Windows：`Ctrl+Shift+P`）→ `Extensions: Install from VSIX...`
 3. 执行 `Developer: Reload Window`
 
@@ -300,11 +320,13 @@ cursor --install-extension akitogo.cursor-token-usage
 
 面板按钮：刷新、设置 Session Token、状态栏位置、配置提醒。
 
+趋势图：Token（输入 / 输出 / 缓存堆叠 + 折线）或费用（柱 + 折线）。日期框范围是账单周期，默认近 7 天。费用 Tab 仅在接口返回美分时作图。后台轮询只更新状态栏；面板开着时若数据已过时，会提示点刷新。
+
 ### 配置
 
 | 配置项 | 默认 | 说明 |
 | --- | --- | --- |
-| `cursorTokenUsage.displayCount` | 5 | 详情面板最近用量条数 |
+| `cursorTokenUsage.displayCount` | 5 | 详情面板最近用量条数（不影响趋势图拉取范围） |
 | `cursorTokenUsage.pollingInterval` | 30 | 轮询间隔（秒，5–300） |
 | `cursorTokenUsage.showStatusBar` | true | 是否显示状态栏 |
 | `cursorTokenUsage.statusBarAlignment` | `right` | 状态栏位置：`left` / `right` |
@@ -341,7 +363,7 @@ cursor --install-extension akitogo.cursor-token-usage
 
 **为什么不估算美元？**
 
-自助套餐的用量事件里，美元经常是 `$0`（`chargedCents: 0`），即使已经消耗 token。用 token × 官网单价对不上账单：套餐额度、团队 / 企业折扣、Cursor Token Rate 都在服务端结算。只有接口自己返回美分时才显示 `$`。Token 始终按 token 显示。
+自助套餐的用量事件里，美元经常是 `$0`（`chargedCents: 0`），即使已经消耗 token。用 token × 官网单价对不上账单：套餐额度、团队 / 企业折扣、Cursor Token Rate 都在服务端结算。只有接口自己返回美分时才显示 `$`。Token 始终按 token 显示。这时 **费用** Tab 会空，请看 **Token**。
 
 **状态栏一直是 Set Token？**
 
@@ -355,6 +377,10 @@ cursor --install-extension akitogo.cursor-token-usage
 
 阈值是相邻两次轮询的 delta。把 `pollingInterval` 和对应 `alertThreshold.*` 调大或调小；`0` 表示有变化就提醒。
 
+**详情面板数字没跟着状态栏变？**
+
+状态栏按轮询间隔刷新。面板会保住当前日期和图表，直到点 **刷新**（或重新打开），避免日期选择被重置。状态栏已更新时，面板顶部会提示去刷新。
+
 ### 从源码构建
 
 ```bash
@@ -364,6 +390,16 @@ npx @vscode/vsce package --no-dependencies
 ```
 
 安装生成的 `.vsix` 后执行 **Developer: Reload Window**。
+
+### 更新说明（1.0.9）
+
+- 打开或刷新详情面板时翻页拉取用量事件（每页 100 条，最多 30 页）
+- 状态栏轮询保持轻量（一页），并把新事件合并进已有全量列表，不会用短列表覆盖
+- 打开 / 刷新面板会等正在进行的轮询结束，不再把全量拉取直接跳过
+- 日期选择范围跟账单周期；趋势图默认近 7 天；From / To 可跨月
+- 后台轮询不再整页重绘面板；状态栏已更新时会提示点刷新
+- 费用图同样画趋势线；图例随 Token / 费用 Tab 切换并居中
+- 接口没返回美分时费用 Tab 为空（不按官网单价估算）
 
 ### 更新说明（1.0.8）
 
