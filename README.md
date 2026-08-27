@@ -46,7 +46,7 @@ cursor --install-extension akitogo.cursor-token-usage
 
 ### From a VSIX
 
-1. Download `cursor-token-usage-1.0.9.vsix` from [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.0.9)
+1. Download `cursor-token-usage-1.0.10.vsix` from [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.0.10)
 2. Drag it into Cursor, or `Cmd+Shift+P` (Windows: `Ctrl+Shift+P`) → `Extensions: Install from VSIX...`
 3. Run `Developer: Reload Window`
 
@@ -176,6 +176,11 @@ npx @vscode/vsce package --no-dependencies
 
 Install the resulting `.vsix`, then **Developer: Reload Window**.
 
+## Changelog (1.0.10)
+
+- Pool percentages below 1% show one decimal (`0.2%`) instead of rounding to `0%`
+- Tracker log prints raw `autoPercentUsed` / `apiPercentUsed` / `totalPercentUsed`
+
 ## Changelog (1.0.9)
 
 - Paginate usage events (100 per page, up to 30 pages) when the details panel is opened or refreshed
@@ -261,7 +266,7 @@ cursor --install-extension akitogo.cursor-token-usage
 
 #### 从 VSIX 安装
 
-1. 从 [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.0.9) 下载 `cursor-token-usage-1.0.9.vsix`
+1. 从 [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.0.10) 下载 `cursor-token-usage-1.0.10.vsix`
 2. 拖进 Cursor，或 `Cmd+Shift+P`（Windows：`Ctrl+Shift+P`）→ `Extensions: Install from VSIX...`
 3. 执行 `Developer: Reload Window`
 
@@ -390,6 +395,11 @@ npx @vscode/vsce package --no-dependencies
 ```
 
 安装生成的 `.vsix` 后执行 **Developer: Reload Window**。
+
+### 更新说明（1.0.10）
+
+- 双池比例低于 1% 时显示一位小数（`0.2%`），不再四舍五入成 `0%`
+- Tracker 日志打印 `autoPercentUsed` / `apiPercentUsed` / `totalPercentUsed` 原始值
 
 ### 更新说明（1.0.9）
 

@@ -80,7 +80,7 @@ function clampPct(pct: number): number {
 function meter(label: string, valueText: string, pct: number, unlimited = false): string {
   const width = unlimited ? 100 : clampPct(pct);
   const color = unlimited ? "var(--ok)" : barColor(pct);
-  const pctLabel = unlimited ? "∞" : `${Math.round(pct)}%`;
+  const pctLabel = formatPct(pct, unlimited);
   return `<div class="meter">
     <div class="meter-head"><span>${escapeHtml(label)}</span><strong>${escapeHtml(valueText)}</strong></div>
     <div class="track"><div class="fill" style="width:${width}%;background:${color}"></div></div>
@@ -94,7 +94,7 @@ function ring(pct: number, headline: string, sub: string, unlimited: boolean): s
   const p = unlimited ? 0 : clampPct(pct);
   const offset = unlimited ? 0 : c * (1 - p / 100);
   const color = unlimited ? "var(--ok)" : barColor(pct);
-  const center = unlimited ? "∞" : `${Math.round(p)}%`;
+  const center = formatPct(pct, unlimited);
   return `<div class="hero">
     <div class="ring-wrap">
       <svg viewBox="0 0 128 128" class="ring">

@@ -143,7 +143,7 @@ export class UsageTracker {
         log.appendLine(`[${ts}] poll#${pollId} lite 合并 ${extras.length} 条新事件，共 ${events.length} 条`);
       }
       log.appendLine(
-        `[${ts}] poll#${pollId} 成功 full=${snapshot.eventsComplete} events=${snapshot.events.length} C=${snapshot.cursorModelsPercent}% O=${snapshot.otherModelsPercent}% tokens=${snapshot.totalTokens}`,
+        `[${ts}] poll#${pollId} 成功 full=${snapshot.eventsComplete} events=${snapshot.events.length} C=${snapshot.cursorModelsPercent} O=${snapshot.otherModelsPercent} totalPct=${snapshot.totalPercent} tokens=${snapshot.totalTokens}`,
       );
       this._lastSnapshot = snapshot;
       if (prev && !wasRecovering) this.checkAlerts(prev, snapshot);

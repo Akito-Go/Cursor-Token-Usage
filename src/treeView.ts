@@ -265,5 +265,9 @@ export function shortenModel(model: string): string {
 export function formatPct(pct: number | null, unlimited: boolean): string {
   if (unlimited) return "∞";
   if (pct === null) return "—";
+  if (pct > 0 && pct < 1) {
+    const one = (Math.round(pct * 10) / 10).toFixed(1);
+    return one === "0.0" ? "<0.1%" : `${one}%`;
+  }
   return `${Math.round(pct)}%`;
 }
