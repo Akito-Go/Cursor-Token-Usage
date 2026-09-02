@@ -4,6 +4,7 @@ import {
   clearCachedToken,
   getAccessToken,
   getUserId,
+  isAutoReadEnabled,
 } from "./credentials";
 import {
   FetchResult,
@@ -42,7 +43,7 @@ function log(msg: string): void {
 }
 
 async function getSessionToken(): Promise<{ userId: string; cookieValue: string } | null> {
-  if (!autoTokenFailed) {
+  if (!autoTokenFailed && isAutoReadEnabled()) {
     const userId = await getUserId();
     const accessToken = userId ? await getAccessToken() : null;
     if (userId && accessToken) {

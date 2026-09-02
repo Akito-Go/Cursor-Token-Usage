@@ -13,6 +13,7 @@ export class UsagePanel {
     getSnapshot: () => UsageSnapshot | null,
     getError: () => string | null,
     onMessage: (command: string) => void,
+    onClose?: () => void,
   ): UsagePanel {
     if (UsagePanel.current) {
       UsagePanel.current.refresh();
@@ -25,7 +26,7 @@ export class UsagePanel {
       vscode.ViewColumn.Beside,
       { enableScripts: true, retainContextWhenHidden: true },
     );
-    UsagePanel.current = new UsagePanel(panel, getSnapshot, getError, onMessage);
+    UsagePanel.current = new UsagePanel(panel, getSnapshot, getError, onMessage, onClose);
     context.subscriptions.push(panel);
     return UsagePanel.current;
   }
@@ -35,6 +36,7 @@ export class UsagePanel {
     getSnapshot: () => UsageSnapshot | null,
     getError: () => string | null,
     onMessage: (command: string) => void,
+    onClose?: () => void,
   ) {
     this.panel = panel;
     this.getSnapshot = getSnapshot;
@@ -45,6 +47,7 @@ export class UsagePanel {
     });
     panel.onDidDispose(() => {
       if (UsagePanel.current === this) UsagePanel.current = undefined;
+      onClose?.();
     });
   }
 

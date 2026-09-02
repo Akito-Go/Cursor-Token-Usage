@@ -8,6 +8,19 @@ const MAX_JSON_FILE_SIZE = 10 * 1024 * 1024;
 
 let cachedAccessToken: string | null = null;
 let cachedUserId: string | null = null;
+let autoReadEnabled = false;
+
+export function setAutoReadEnabled(enabled: boolean): void {
+  autoReadEnabled = enabled;
+  if (!enabled) {
+    cachedAccessToken = null;
+    cachedUserId = null;
+  }
+}
+
+export function isAutoReadEnabled(): boolean {
+  return autoReadEnabled;
+}
 
 export function clearCachedToken(): void {
   cachedAccessToken = null;

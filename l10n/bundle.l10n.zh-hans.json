@@ -110,5 +110,9 @@
   "Cursor Models": "Cursor Models",
   "Other Models": "Other Models",
   "Cursor Models %": "Cursor Models %",
-  "Other Models %": "Other Models %"
+  "Other Models %": "Other Models %",
+  "Allow this extension to read the local Cursor session (state.vscdb) to show token usage? The session is sent only to cursor.com. You can also set a token manually.": "是否允许本扩展读取本机 Cursor 登录会话（state.vscdb）以显示 Token 用量？会话只会发送到 cursor.com。也可以稍后手动设置 Token。",
+  "Allow": "允许",
+  "Not now": "稍后再说",
+  "Don't allow": "不允许"
 }

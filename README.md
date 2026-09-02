@@ -26,10 +26,10 @@ Cursor now bills by tokens in two pools (not the old “fast-premium requests + 
 
 **Also:**
 
-- Auto refresh, default 30 seconds; slower while the window is unfocused
+- Auto refresh, default 30 seconds; slower while the window is unfocused; pauses when the status bar, alerts, and details panel are all unused; backs off after consecutive failures
 - Status-bar polls are light (one page of events); opening or refreshing the details panel paginates the full billing-cycle list
 - English / Chinese UI, follows the editor language
-- Universal VSIX for macOS / Windows / Linux; reads the local Cursor session (`state.vscdb`)
+- Universal VSIX for macOS / Windows / Linux; after first-run consent, reads the local Cursor session (`state.vscdb`)
 - UI extension (`extensionKind: ui`): on SSH Remote, WSL, or Dev Containers it still reads the **local** login
 - Shows `$` only when the API returns cents; does not estimate invoices from list prices
 - Trend chart defaults to the last 7 days; From / To can span months within the billing cycle
@@ -46,7 +46,7 @@ cursor --install-extension akitogo.cursor-token-usage
 
 ### From a VSIX
 
-1. Download `cursor-token-usage-1.0.10.vsix` from [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.0.10)
+1. Download `cursor-token-usage-1.1.0.vsix` from [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.1.0)
 2. Drag it into Cursor, or `Cmd+Shift+P` (Windows: `Ctrl+Shift+P`) → `Extensions: Install from VSIX...`
 3. Run `Developer: Reload Window`
 
@@ -54,7 +54,7 @@ The status bar should show usage. If the session is missing it shows **Set Token
 
 ## Authentication
 
-The extension reads `cursorAuth/accessToken` and the user id from the local `state.vscdb`, builds a `WorkosCursorSessionToken` cookie, and sends it to **`cursor.com` only**.
+On first launch the extension asks before reading the local Cursor session. After you allow it, it reads `cursorAuth/accessToken` and the user id from `state.vscdb`, builds a `WorkosCursorSessionToken` cookie, and sends it to **`cursor.com` only**. You can decline and set a token manually instead.
 
 | OS | Session file |
 | --- | --- |
@@ -77,7 +77,7 @@ To copy the cookie: open [cursor.com](https://cursor.com) → DevTools → Appli
 ## UI
 
 ```
-Status bar (individual):      $(graph) C 42% · O 18%
+Status bar (individual):      $(graph) C 42.3% · O 18.0%
 Status bar (team/enterprise): $(graph) $67.88/$52.00
 
 Details panel
@@ -88,8 +88,8 @@ Details panel
 │   (  131%  )   Included usage               │
 │                $67.88 / $52.00              │
 │ ████████████████████████████░░░░  over 100% │
-│ Cursor Models   ████████░░░░░░░░     42%    │
-│ Other Models    ███░░░░░░░░░░░░░     18%    │
+│ Cursor Models   ████████░░░░░░░░     42.3%  │
+│ Other Models    ███░░░░░░░░░░░░░     18.0%  │
 │ On-Demand       $5.74                       │
 │                                             │
 │ By Model                                    │
@@ -176,6 +176,13 @@ npx @vscode/vsce package --no-dependencies
 
 Install the resulting `.vsix`, then **Developer: Reload Window**.
 
+## Changelog (1.1.0)
+
+- Pool percentages always show one decimal (`42.3%`, `0.2%`)
+- First launch asks before reading the local Cursor session (`state.vscdb`)
+- Background polling stops when the status bar, alerts, and details panel are all unused
+- Consecutive fetch failures use exponential backoff (capped at 10 minutes)
+
 ## Changelog (1.0.10)
 
 - Pool percentages below 1% show one decimal (`0.2%`) instead of rounding to `0%`
@@ -246,10 +253,10 @@ Cursor 已改为按 token、双池计费（不再是旧的「fast-premium 请求
 
 **更多亮点：**
 
-- 自动刷新，默认 30 秒；窗口失焦时降低频率
+- 自动刷新，默认 30 秒；窗口失焦时降低频率；状态栏、提醒、详情面板都不用时暂停；连续失败后指数退避
 - 状态栏轮询只拉一页事件；打开或刷新详情面板时才翻页拉全量账单周期
 - 中 / 英界面，跟随编辑器语言
-- macOS / Windows / Linux 通用 VSIX，自动读本机 Cursor 会话（`state.vscdb`）
+- macOS / Windows / Linux 通用 VSIX，首次确认后读本机 Cursor 会话（`state.vscdb`）
 - UI 扩展（`extensionKind: ui`）：SSH Remote、WSL、Dev Containers 下仍读**本机**登录
 - 只在接口返回美分时显示 `$`，不用官网单价估算账单
 - 趋势图默认近 7 天；From / To 可在账单周期内跨月
@@ -266,7 +273,7 @@ cursor --install-extension akitogo.cursor-token-usage
 
 #### 从 VSIX 安装
 
-1. 从 [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.0.10) 下载 `cursor-token-usage-1.0.10.vsix`
+1. 从 [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.1.0) 下载 `cursor-token-usage-1.1.0.vsix`
 2. 拖进 Cursor，或 `Cmd+Shift+P`（Windows：`Ctrl+Shift+P`）→ `Extensions: Install from VSIX...`
 3. 执行 `Developer: Reload Window`
 
@@ -274,7 +281,7 @@ cursor --install-extension akitogo.cursor-token-usage
 
 ### 认证
 
-扩展从本机 `state.vscdb` 读取 `cursorAuth/accessToken` 与用户 id，拼成 `WorkosCursorSessionToken` Cookie，**只发给 `cursor.com`**。
+首次启动会询问是否允许读取本机 Cursor 会话。允许后从 `state.vscdb` 读取 `cursorAuth/accessToken` 与用户 id，拼成 `WorkosCursorSessionToken` Cookie，**只发给 `cursor.com`**。也可以拒绝，改为手动设置 Token。
 
 | 系统 | 会话文件 |
 | --- | --- |
@@ -297,7 +304,7 @@ cursor --install-extension akitogo.cursor-token-usage
 ### 操作界面
 
 ```
-状态栏（个人）：     $(graph) C 42% · O 18%
+状态栏（个人）：     $(graph) C 42.3% · O 18.0%
 状态栏（团队/企业）： $(graph) $67.88/$52.00
 
 详情面板
@@ -308,8 +315,8 @@ cursor --install-extension akitogo.cursor-token-usage
 │   (  131%  )   套餐内用量                    │
 │                $67.88 / $52.00              │
 │ ████████████████████████████░░░░  已超 100% │
-│ Cursor Models   ████████░░░░░░░░     42%    │
-│ Other Models    ███░░░░░░░░░░░░░     18%    │
+│ Cursor Models   ████████░░░░░░░░     42.3%  │
+│ Other Models    ███░░░░░░░░░░░░░     18.0%  │
 │ On-Demand       $5.74                       │
 │                                             │
 │ 按模型                                      │
@@ -395,6 +402,13 @@ npx @vscode/vsce package --no-dependencies
 ```
 
 安装生成的 `.vsix` 后执行 **Developer: Reload Window**。
+
+### 更新说明（1.1.0）
+
+- 双池比例一律显示一位小数（`42.3%`、`0.2%`）
+- 首次启动需确认后才读取本机 Cursor 会话（`state.vscdb`）
+- 状态栏、提醒、详情面板都不用时停止后台轮询
+- 连续请求失败后指数退避（上限 10 分钟）
 
 ### 更新说明（1.0.10）
 

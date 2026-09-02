@@ -173,7 +173,7 @@ export class UsageTreeProvider implements vscode.TreeDataProvider<UsageTreeItem>
 
 function percentItem(label: string, id: string, pct: number | null, unlimited: boolean): UsageTreeItem {
   const item = new UsageTreeItem(label, vscode.TreeItemCollapsibleState.None);
-  item.description = unlimited ? "∞" : pct === null ? "—" : `${Math.round(pct)}%`;
+  item.description = formatPct(pct, unlimited);
   item.iconPath = unlimited ? new vscode.ThemeIcon("infinite") : percentIcon(pct ?? 0);
   item.contextValue = `summaryChild_${id}`;
   return item;
@@ -265,9 +265,7 @@ export function shortenModel(model: string): string {
 export function formatPct(pct: number | null, unlimited: boolean): string {
   if (unlimited) return "∞";
   if (pct === null) return "—";
-  if (pct > 0 && pct < 1) {
-    const one = (Math.round(pct * 10) / 10).toFixed(1);
-    return one === "0.0" ? "<0.1%" : `${one}%`;
-  }
-  return `${Math.round(pct)}%`;
+  if (pct <= 0) return "0.0%";
+  const one = (Math.round(pct * 10) / 10).toFixed(1);
+  return one === "0.0" ? "<0.1%" : `${one}%`;
 }

@@ -8,6 +8,7 @@ import {
   initSecretStorage,
   storeSecretToken,
 } from "./api";
+import { setAutoReadEnabled } from "./credentials";
 import { UsageAlert, UsageSnapshot } from "./models";
 import { UsagePanel } from "./panel";
 import { UsageTracker } from "./tracker";
@@ -21,6 +22,8 @@ let windowFocused = true;
 let suppressStale = false;
 
 const STATUS_ICON = "$(graph)";
+const CONSENT_KEY = "cursorTokenUsage.localSessionConsent";
+const BACKOFF_CAP_SECONDS = 600;
 
 export function activate(context: vscode.ExtensionContext): void {
   initSecretStorage(context.secrets);
@@ -45,30 +48,92 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.onDidChangeWindowState((state) => {
       windowFocused = state.focused;
       startPolling();
-      if (state.focused) void tracker.poll();
+      if (state.focused && hasPollConsumer()) void tracker.poll();
     }),
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration("cursorTokenUsage.pollingInterval")) startPolling();
       if (e.affectsConfiguration("cursorTokenUsage.statusBarAlignment")) recreateStatusBar();
       else if (e.affectsConfiguration("cursorTokenUsage")) updateStatusBar();
+      if (
+        e.affectsConfiguration("cursorTokenUsage.pollingInterval") ||
+        e.affectsConfiguration("cursorTokenUsage.showStatusBar") ||
+        e.affectsConfiguration("cursorTokenUsage.alertEnabled")
+      ) {
+        startPolling();
+      }
     }),
   );
 
-  void tracker.poll(true);
-  startPolling();
+  void (async () => {
+    await ensureSessionConsent();
+    if (hasPollConsumer()) void tracker.poll(true);
+    startPolling();
+  })();
 }
 
 export function deactivate(): void {
-  if (pollTimer) clearInterval(pollTimer);
+  if (pollTimer) clearTimeout(pollTimer);
+}
+
+function hasPollConsumer(): boolean {
+  const config = vscode.workspace.getConfiguration("cursorTokenUsage");
+  return (
+    config.get("showStatusBar", true) ||
+    config.get("alertEnabled", true) ||
+    !!UsagePanel.current
+  );
+}
+
+function currentIntervalSeconds(): number {
+  const seconds = vscode.workspace.getConfiguration("cursorTokenUsage").get<number>("pollingInterval", 30);
+  const base = windowFocused ? Math.max(5, seconds) : Math.max(90, seconds);
+  const failures = tracker.consecutiveFailures;
+  if (failures <= 0) return base;
+  return Math.min(base * 2 ** Math.min(failures, 5), BACKOFF_CAP_SECONDS);
 }
 
 function startPolling(): void {
-  if (pollTimer) clearInterval(pollTimer);
-  const seconds = vscode.workspace.getConfiguration("cursorTokenUsage").get<number>("pollingInterval", 30);
-  const interval = windowFocused ? Math.max(5, seconds) : Math.max(90, seconds);
-  pollTimer = setInterval(() => {
-    void tracker.poll();
-  }, interval * 1000);
+  if (pollTimer) {
+    clearTimeout(pollTimer);
+    pollTimer = undefined;
+  }
+  if (!hasPollConsumer()) return;
+  pollTimer = setTimeout(() => {
+    void tracker.poll().finally(() => startPolling());
+  }, currentIntervalSeconds() * 1000);
+}
+
+async function ensureSessionConsent(): Promise<void> {
+  const stored = extensionContext.globalState.get<string>(CONSENT_KEY);
+  if (stored === "granted") {
+    setAutoReadEnabled(true);
+    return;
+  }
+  if (stored === "denied") {
+    setAutoReadEnabled(false);
+    return;
+  }
+
+  const allow = vscode.l10n.t("Allow");
+  const later = vscode.l10n.t("Not now");
+  const deny = vscode.l10n.t("Don't allow");
+  const pick = await vscode.window.showInformationMessage(
+    vscode.l10n.t(
+      "Allow this extension to read the local Cursor session (state.vscdb) to show token usage? The session is sent only to cursor.com. You can also set a token manually.",
+    ),
+    { modal: true },
+    allow,
+    later,
+    deny,
+  );
+  if (pick === allow) {
+    await extensionContext.globalState.update(CONSENT_KEY, "granted");
+    setAutoReadEnabled(true);
+    return;
+  }
+  if (pick === deny) {
+    await extensionContext.globalState.update(CONSENT_KEY, "denied");
+  }
+  setAutoReadEnabled(false);
 }
 
 async function refresh(): Promise<void> {
@@ -214,7 +279,9 @@ function showDetails(): void {
       if (command === "align") void setStatusBarAlignment();
       if (command === "alerts") void configureAlerts();
     },
+    () => startPolling(),
   );
+  startPolling();
   void refresh();
 }
 
@@ -339,9 +406,9 @@ function showAlerts(alerts: UsageAlert[]): void {
       case "newSession":
         return vscode.l10n.t("Detected {0} new usage request(s)", alert.delta);
       case "cursorModels":
-        return vscode.l10n.t("Cursor Models usage increased by {0}%", Math.round(alert.delta));
+        return vscode.l10n.t("Cursor Models usage increased by {0}%", alert.delta.toFixed(1));
       case "otherModels":
-        return vscode.l10n.t("Other Models usage increased by {0}%", Math.round(alert.delta));
+        return vscode.l10n.t("Other Models usage increased by {0}%", alert.delta.toFixed(1));
       case "overallSpending":
         return vscode.l10n.t("Included usage increased by ${0}", alert.delta.toFixed(2));
       case "onDemandSpending":
