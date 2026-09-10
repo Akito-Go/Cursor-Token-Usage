@@ -7,7 +7,7 @@ export interface UsageEvent {
   outputTokens: number;
   cacheWriteTokens: number;
   cacheReadTokens: number;
-  totalCents: number;
+  totalCents: number | null;
 }
 
 export interface ModelAgg {
@@ -23,6 +23,7 @@ export type DisplayMode = "pools" | "overall";
 
 export interface UsageSnapshot {
   timestamp: Date;
+  accountId: string;
   membershipType: string;
   billingCycleStart: string;
   billingCycleEnd: string;

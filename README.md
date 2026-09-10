@@ -27,12 +27,15 @@ Cursor now bills by tokens in two pools (not the old “fast-premium requests + 
 **Also:**
 
 - Auto refresh, default 30 seconds; slower while the window is unfocused; pauses when the status bar, alerts, and details panel are all unused; backs off after consecutive failures
-- Status-bar polls are light (one page of events); opening or refreshing the details panel paginates the full billing-cycle list
+- Status-bar polls fetch one page of up to 100 events; opening or refreshing the details panel fetches billing-cycle history, up to 30 pages (3,000 events) per refresh
+- Failed or capped history fetches are marked incomplete; fetch failures show warnings, and available cached data is retained within the same account and billing cycle
 - English / Chinese UI, follows the editor language
 - Universal VSIX for macOS / Windows / Linux; after first-run consent, reads the local Cursor session (`state.vscdb`)
 - UI extension (`extensionKind: ui`): on SSH Remote, WSL, or Dev Containers it still reads the **local** login
 - Shows `$` only when the API returns cents; does not estimate invoices from list prices
 - Trend chart defaults to the last 7 days; From / To can span months within the billing cycle
+- Today’s usage shows API-reported cost, tokens, requests and top models, with missing-data labels
+- Billing-cycle budgets notify at 50%, 80% and 100%; connection diagnostics show authentication source, endpoint results and polling state
 
 ## Quick Start
 
@@ -46,7 +49,7 @@ cursor --install-extension akitogo.cursor-token-usage
 
 ### From a VSIX
 
-1. Download `cursor-token-usage-1.1.0.vsix` from [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.1.0)
+1. For this source version, build `cursor-token-usage-1.1.1.vsix` using [Build from Source](#build-from-source), or obtain the matching version from [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases) if published
 2. Drag it into Cursor, or `Cmd+Shift+P` (Windows: `Ctrl+Shift+P`) → `Extensions: Install from VSIX...`
 3. Run `Developer: Reload Window`
 
@@ -103,14 +106,16 @@ Details panel
 
 Bar colors: green < 40%, yellow < 80%, orange ≥ 80%, red ≥ 100%. Usage ≥ 80% tints the status bar warning; ≥ 100% tints it error.
 
-Panel buttons: Refresh, Set Session Token, status bar side, Configure Alerts.
+Panel buttons: Refresh, Set Session Token, status bar side, Configure Alerts, Configure Budget, Connection Diagnostics.
 
-Trend chart: Token (stacked input / output / cache + line) or Cost (bars + line). Date inputs are bounded by the billing cycle and default to the last 7 days. The Cost tab only draws when the API returns cents. Background polls update the status bar only; if the panel is open, a banner asks you to Refresh for details.
+Trend chart: Token (stacked input / output / cache + line) or Cost (bars + line). Date inputs are bounded by the billing cycle and default to the last 7 days. The Cost tab only draws when the API returns cents. Background polls update the status bar and panel status banners while preserving the chart and date selection. Fetch errors appear immediately in an open panel; after recovery, a banner asks you to Refresh for current details.
 
 ## Configuration
 
 | Setting | Default | Description |
 | --- | --- | --- |
+| `cursorTokenUsage.budgetAmount` | 0 | Billing-cycle budget in USD; 0 disables budget alerts |
+| `cursorTokenUsage.budgetMetric` | `onDemand` | Budget basis: `onDemand` or `included`; global application setting |
 | `cursorTokenUsage.displayCount` | 5 | Recent usage rows in the details panel (does not limit the trend chart) |
 | `cursorTokenUsage.pollingInterval` | 30 | Poll interval in seconds (5–300) |
 | `cursorTokenUsage.showStatusBar` | true | Show the status bar item |
@@ -129,20 +134,36 @@ Trend chart: Token (stacked input / output / cache + line) or Cost (bars + line)
 | Command | What it does |
 | --- | --- |
 | Show Token Usage Details | Open the details panel (same as clicking the status bar) |
-| Refresh Token Usage | Poll immediately |
+| Refresh Token Usage | Fetch usage; wait for an active poll first, and fetch history if the details panel is open |
 | Set Session Token | Paste / clear the session token |
 | Set Polling Interval | 5–300 seconds |
 | Set Status Bar Side | Left / right |
 | Configure Usage Alerts | Toggle, pick metrics, set thresholds |
+| Configure Billing-Cycle Budget | Select the cost basis and budget amount |
+| Show Connection Diagnostics | Open a read-only report of connection and polling state |
 
 ## Usage Alerts
 
 1. Command Palette → **Configure Usage Alerts**, or the Alerts button in the details panel
 2. Enable alerts → pick metrics → set thresholds
 3. Monitors: new requests, included spend, Cursor Models %, Other Models %, On-Demand spend, total tokens
-4. A threshold of `0` means any change fires an alert
+4. A threshold of `0` means any positive increase fires an alert
 
-> Thresholds are the **delta between two consecutive polls**, not a lifetime or absolute cap. Example: `onDemandSpending = 1.0` fires when on-demand spend rises by $1.00 or more since the last successful poll.
+> Thresholds are the **positive delta between consecutive successful polls** for the same account and billing cycle, not a lifetime or absolute cap. Example: `onDemandSpending = 1.0` fires when on-demand spend rises by $1.00 or more between those polls.
+
+New-request alerts work with the details panel closed. They count newly observed requests in the fetched page; loading older history does not trigger them. A background poll fetches at most 100 events, so requests beyond that page may be missed during busy periods or long gaps. Opening details loads more history but does not retroactively alert on older requests.
+
+Changing the account or billing cycle resets the alert baseline. The first successful poll after a fetch failure establishes a new baseline; event or model-total failures also suppress the affected alerts during failure and the first recovery poll.
+
+## Budget, Today and Diagnostics
+
+**Budget:** use **Configure Budget** in the panel or **Configure Billing-Cycle Budget** in the Command Palette. Choose **On-Demand** (default) or **Included usage**, then enter a USD amount with up to two decimal places. These are separate API amounts; the extension does not add them together. `0` disables the budget. Both budget settings apply globally, and `alertEnabled` also controls budget notifications.
+
+Budget alerts use absolute billing-cycle usage, so gradual consumption can reach a threshold even when no single poll triggers a usage-change alert. Each 50%, 80% and 100% milestone is remembered across reloads. If one poll reaches several new levels, only the highest is notified and lower levels are considered reached. Configuring a budget below current usage can notify immediately. A new account, billing cycle, budget amount or cost basis starts a separate milestone record. Up to 100 recent combinations are retained locally as hashed scope keys and reached levels; session tokens are not stored in this record. Missing selected amounts or invalid cycle dates suppress budget alerts.
+
+**Today:** the details panel shows cost, tokens, request count and the top three models by tokens. “Today” uses the computer’s local timezone, limited to the current billing cycle and the last fetched snapshot. The status-bar tooltip includes today’s tokens and requests. Costs sum only amounts returned by the events API; a missing amount stays unavailable, while an explicit zero remains zero. Partially priced or incomplete history is labeled, and event costs may differ from the invoice. Refresh the details panel to fetch more history and update these cards.
+
+**Diagnostics:** use **Connection Diagnostics** in the panel or **Show Connection Diagnostics** in the Command Palette. The output report includes the last-used authentication source (local session / manual token / unavailable), last attempt and successful fetch, summary/events/model endpoint results, consecutive failures, current polling interval and cached-history completeness. It displays no token, cookie or raw account ID and sends no report anywhere. The report is a snapshot: refresh usage and reopen diagnostics for new results. A timed-out poll can leave endpoint results unknown.
 
 ## FAQ
 
@@ -160,21 +181,43 @@ Install the extension in **local** Cursor, not on the remote host. It is a UI ex
 
 **Alerts too noisy / never fire?**
 
-Thresholds are the delta between adjacent polls. Raise or lower `pollingInterval` and the matching `alertThreshold.*`. `0` means any change.
+Thresholds are positive increases between consecutive successful polls. Adjust `pollingInterval` and the matching `alertThreshold.*`. `0` means any increase. New-request alerts work without opening details, but background polling can only inspect the latest 100 events per fetch. Recovery and account or billing-cycle changes reset the relevant baseline.
 
 **Details panel looks stale?**
 
-The status bar refreshes on the polling interval. The panel keeps the current date range and chart until you click **Refresh** (or reopen it), so the date picker is not reset. A banner appears when the status bar has newer data.
+The status bar refreshes on the polling interval. The panel keeps its chart until you click **Refresh** (or reopen it), and preserves valid date selections. A banner appears when the status bar has newer data. Fetch-error banners update immediately without rebuilding the chart.
+
+**Why is there a cached-data or incomplete-history warning?**
+
+If a fetch fails after usage has loaded, the status bar shows a warning and its tooltip explains the error. A summary failure also shows the last successful fetch time. The details panel displays the error even while cached usage remains visible. Failed model-total fetches retain available cached totals for the same account and billing cycle.
+
+History fetches stop after 30 pages of 100 events. A failed page, a page limit, or a gap between fetched pages leaves history marked incomplete. Charts show only available events; missing dates must not be interpreted as confirmed zero usage. Click **Refresh** to retry transient failures. The 3,000-event limit applies to each full fetch, so repeating it cannot guarantee complete history for a larger cycle.
 
 ## Build from Source
 
+Use Node.js 20 or later and npm.
+
 ```bash
 npm install
-npm run compile
+npm test
 npx @vscode/vsce package --no-dependencies
 ```
 
-Install the resulting `.vsix`, then **Developer: Reload Window**.
+`npm test` compiles the extension and runs regression tests with simulated API responses; it does not access a real Cursor account. Packaging also compiles automatically and excludes test files.
+
+This version produces `cursor-token-usage-1.1.1.vsix`. Install it, then run **Developer: Reload Window**. Building locally does not publish the package to Open VSX or GitHub Releases.
+
+## Changelog (1.1.1)
+
+- Add persistent billing-cycle budget milestones (50%, 80%, 100%), today’s usage cards and connection diagnostics
+- Preserve missing event costs as unavailable instead of treating them as zero
+
+- Fix polling locks that skipped automatic updates or stalled manual refreshes; clear completed timeout timers
+- Reset cached history and alert baselines when the billing cycle or account changes
+- Enable new-request alerts during background polling without treating older history as new usage
+- Flag failed or capped pagination as incomplete; retain available history and cached model totals on partial failures
+- Show fetch errors and cached-data warnings in the status bar and details panel, including background failures
+- Add regression tests (`npm test`) and compile automatically before packaging
 
 ## Changelog (1.1.0)
 
@@ -254,12 +297,15 @@ Cursor 已改为按 token、双池计费（不再是旧的「fast-premium 请求
 **更多亮点：**
 
 - 自动刷新，默认 30 秒；窗口失焦时降低频率；状态栏、提醒、详情面板都不用时暂停；连续失败后指数退避
-- 状态栏轮询只拉一页事件；打开或刷新详情面板时才翻页拉全量账单周期
+- 状态栏轮询只拉一页、最多 100 条事件；打开或刷新详情面板时翻页拉取账单周期历史，每次最多 30 页（3,000 条）
+- 分页失败或达到上限时标记历史不完整；请求失败时显示警告，并保留同一账号、同一账单周期内已有的缓存数据
 - 中 / 英界面，跟随编辑器语言
 - macOS / Windows / Linux 通用 VSIX，首次确认后读本机 Cursor 会话（`state.vscdb`）
 - UI 扩展（`extensionKind: ui`）：SSH Remote、WSL、Dev Containers 下仍读**本机**登录
 - 只在接口返回美分时显示 `$`，不用官网单价估算账单
 - 趋势图默认近 7 天；From / To 可在账单周期内跨月
+- 今日消费展示接口费用、Token、请求数和主要模型，并标注缺失数据
+- 周期预算在 50%、80%、100% 提醒；连接诊断展示认证来源、接口结果和轮询状态
 
 ### 快速开始
 
@@ -273,7 +319,7 @@ cursor --install-extension akitogo.cursor-token-usage
 
 #### 从 VSIX 安装
 
-1. 从 [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases/tag/v1.1.0) 下载 `cursor-token-usage-1.1.0.vsix`
+1. 当前源码版本可按[从源码构建](#从源码构建)生成 `cursor-token-usage-1.1.1.vsix`；若对应版本已发布，也可从 [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases) 获取
 2. 拖进 Cursor，或 `Cmd+Shift+P`（Windows：`Ctrl+Shift+P`）→ `Extensions: Install from VSIX...`
 3. 执行 `Developer: Reload Window`
 
@@ -330,14 +376,16 @@ cursor --install-extension akitogo.cursor-token-usage
 
 进度条：绿 < 40%、黄 < 80%、橙 ≥ 80%、红 ≥ 100%。用量 ≥ 80% 状态栏警告底色，≥ 100% 错误底色。
 
-面板按钮：刷新、设置 Session Token、状态栏位置、配置提醒。
+面板按钮：刷新、设置 Session Token、状态栏位置、配置提醒、配置预算、连接诊断。
 
-趋势图：Token（输入 / 输出 / 缓存堆叠 + 折线）或费用（柱 + 折线）。日期框范围是账单周期，默认近 7 天。费用 Tab 仅在接口返回美分时作图。后台轮询只更新状态栏；面板开着时若数据已过时，会提示点刷新。
+趋势图：Token（输入 / 输出 / 缓存堆叠 + 折线）或费用（柱 + 折线）。日期框范围是账单周期，默认近 7 天。费用 Tab 仅在接口返回美分时作图。后台轮询更新状态栏和面板提示，保留图表及日期选择。面板打开时会即时显示请求失败；恢复后提示点刷新查看最新详情。
 
 ### 配置
 
 | 配置项 | 默认 | 说明 |
 | --- | --- | --- |
+| `cursorTokenUsage.budgetAmount` | 0 | 账单周期预算（美元）；0 为关闭预算提醒 |
+| `cursorTokenUsage.budgetMetric` | `onDemand` | 预算口径：`onDemand` 或 `included`；应用全局配置 |
 | `cursorTokenUsage.displayCount` | 5 | 详情面板最近用量条数（不影响趋势图拉取范围） |
 | `cursorTokenUsage.pollingInterval` | 30 | 轮询间隔（秒，5–300） |
 | `cursorTokenUsage.showStatusBar` | true | 是否显示状态栏 |
@@ -356,20 +404,36 @@ cursor --install-extension akitogo.cursor-token-usage
 | 命令 | 作用 |
 | --- | --- |
 | Show Token Usage Details | 打开详情面板（等同点击状态栏） |
-| Refresh Token Usage | 立即刷新 |
+| Refresh Token Usage | 获取用量；若已有轮询则等待其结束，面板打开时同时拉取历史 |
 | Set Session Token | 粘贴 / 清除 Session Token |
 | Set Polling Interval | 5–300 秒 |
 | Set Status Bar Side | 左 / 右 |
 | Configure Usage Alerts | 开关、监控项、阈值 |
+| Configure Billing-Cycle Budget | 选择金额口径，设置账单周期预算 |
+| Show Connection Diagnostics | 打开连接及轮询状态的只读报告 |
 
 ### 用量提醒
 
 1. 命令面板 → **Configure Usage Alerts**，或详情面板里的提醒按钮
 2. 开启提醒 → 选监控项 → 设阈值
 3. 可监控：新增调用、套餐内花费、Cursor Models %、Other Models %、On-Demand 花费、Token 总量
-4. 阈值 `0` 表示任何变化都提醒
+4. 阈值 `0` 表示任何正向增长都提醒
 
-> 阈值看的是**两次轮询之间的变化量**，不是累计或绝对上限。例如 `onDemandSpending = 1.0`：两次成功轮询之间 On-Demand 增加 $1.00 或以上才触发。
+> 阈值看的是同一账号、同一账单周期内**连续两次成功轮询之间的正向增长**，不是累计或绝对上限。例如 `onDemandSpending = 1.0`：这两次轮询之间 On-Demand 增加 $1.00 或以上才触发。
+
+新请求提醒无需打开详情面板，会统计本次拉取页面中新观察到的请求；补拉旧历史不会触发提醒。后台每次最多获取 100 条事件，高频使用或较长轮询间隔可能漏掉页面之外的请求。打开详情会拉取更多历史，但不会对较旧请求补发提醒。
+
+账号或账单周期变化时重置提醒基线。请求失败后的首次成功轮询只建立新基线；事件或模型汇总接口失败时，也会暂停相应提醒，并在首次恢复时重新建立基线。
+
+### 预算、今日消费与连接诊断
+
+**预算：** 点击面板里的 **配置预算**，或在命令面板执行 **配置周期预算**。选择 **On-Demand（按需费用，默认）** 或 **套餐内用量**，再输入最多两位小数的美元预算。这是两种独立的接口金额，不会相加；`0` 为关闭预算。两项预算配置对整个应用生效，`alertEnabled` 总开关也控制预算通知。
+
+预算按账单周期的累计用量检查，即使每次消费都很小，累计达到档位也会提醒。50%、80%、100% 的提醒记录在重载后保留；一次轮询跨过多个档位时，只提醒最高档，并将较低档标记为已达到。配置低于当前用量的预算时，可能立即提醒。账号、账单周期、预算金额或口径变化后使用独立记录。本机最多保留最近 100 组配置的哈希标识和已达到档位，不在该记录中保存会话 Token。所选金额缺失或周期日期无效时不发预算提醒。
+
+**今日消费：** 面板展示今日费用、Token、请求数和按 Token 排序的前三个模型。按本机时区确定“今天”，范围限于当前账单周期及最近获取的快照；状态栏悬停也可查看今日 Token 和请求数。费用只累加事件接口实际返回的金额，缺失金额显示暂无数据，明确返回的零仍显示零。部分请求缺价或历史不完整时会标注，事件费用可能与最终账单不同。刷新详情可补拉历史并更新卡片。
+
+**连接诊断：** 点击面板里的 **连接诊断**，或在命令面板执行 **查看连接诊断**。输出报告包括最近使用的认证来源（本机会话／手动 Token／不可用）、最近尝试和成功获取时间、汇总／事件／模型接口结果、连续失败次数、当前轮询间隔及缓存历史完整性。不展示 Token、Cookie 或原始账号 ID，也不会发送报告。诊断是当前状态的快照；刷新用量后重新打开可查看更新结果，轮询超时时部分接口状态可能未知。
 
 ### 常见问题
 
@@ -387,21 +451,43 @@ cursor --install-extension akitogo.cursor-token-usage
 
 **提醒太频繁 / 从不响？**
 
-阈值是相邻两次轮询的 delta。把 `pollingInterval` 和对应 `alertThreshold.*` 调大或调小；`0` 表示有变化就提醒。
+阈值是连续两次成功轮询之间的正向增长。可调整 `pollingInterval` 和对应 `alertThreshold.*`；`0` 表示有增长就提醒。新请求提醒无需打开详情，但后台每次只能检查最新 100 条事件。失败恢复、账号或账单周期变化时会重置相应基线。
 
 **详情面板数字没跟着状态栏变？**
 
-状态栏按轮询间隔刷新。面板会保住当前日期和图表，直到点 **刷新**（或重新打开），避免日期选择被重置。状态栏已更新时，面板顶部会提示去刷新。
+状态栏按轮询间隔刷新。面板在点 **刷新**（或重新打开）前保留图表，并保留仍在有效范围内的日期选择。状态栏有新数据时，面板顶部会提示刷新；请求错误会即时更新提示，无需重绘图表。
+
+**为什么提示缓存数据或历史不完整？**
+
+已有用量后请求失败，状态栏会显示警告，悬停可查看错误原因；汇总请求失败时还会显示最近成功获取的时间。详情面板即使保留旧用量，也会展示错误。模型汇总获取失败时，会保留同一账号、同一账单周期内已有的汇总缓存。
+
+历史请求每次最多拉取 30 页，每页 100 条。分页失败、达到页数上限或两次拉取之间存在缺口时，会标记历史不完整。图表只统计已有记录，缺失日期不能视为已确认的零消费。临时失败可点击 **刷新** 重试；每次全量请求仍有 3,000 条上限，因此重复刷新不保证覆盖更大的账单周期。
 
 ### 从源码构建
 
+需要 Node.js 20 或更新版本及 npm。
+
 ```bash
 npm install
-npm run compile
+npm test
 npx @vscode/vsce package --no-dependencies
 ```
 
-安装生成的 `.vsix` 后执行 **Developer: Reload Window**。
+`npm test` 会先编译，再运行基于模拟接口的回归测试，不访问真实 Cursor 账号。打包前也会自动编译，安装包不包含测试文件。
+
+当前版本生成 `cursor-token-usage-1.1.1.vsix`，安装后执行 **Developer: Reload Window**。本地构建不会发布到 Open VSX 或 GitHub Releases。
+
+### 更新说明（1.1.1）
+
+- 新增跨重载保留的周期预算提醒（50%、80%、100%）、今日消费卡片和连接诊断
+- 缺失的事件费用保留为暂无数据，不再按零处理
+
+- 修复自动轮询被跳过、手动刷新卡住的问题，并清理已完成请求的超时定时器
+- 账单周期或账号变化时重置缓存历史和提醒基线
+- 后台轮询支持新请求提醒，补拉旧历史不会被当作新消费
+- 分页失败或达到上限时明确标记数据不完整；部分接口失败时保留已有历史和模型汇总
+- 状态栏和详情面板展示请求失败及缓存数据提示，后台失败也会即时提示
+- 新增回归测试（`npm test`），打包前自动编译
 
 ### 更新说明（1.1.0）
 

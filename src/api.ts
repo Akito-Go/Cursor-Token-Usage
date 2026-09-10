@@ -21,6 +21,11 @@ const PCT_RE = /(\d+(?:\.\d+)?)\s*%/;
 
 let secretStorage: vscode.SecretStorage | null = null;
 let autoTokenFailed = false;
+let authSource: "auto" | "manual" | "unavailable" = "unavailable";
+
+export function getAuthSource(): "auto" | "manual" | "unavailable" {
+  return authSource;
+}
 
 export function initSecretStorage(storage: vscode.SecretStorage): void {
   secretStorage = storage;
@@ -43,6 +48,7 @@ function log(msg: string): void {
 }
 
 async function getSessionToken(): Promise<{ userId: string; cookieValue: string } | null> {
+  authSource = "unavailable";
   if (!autoTokenFailed && isAutoReadEnabled()) {
     const userId = await getUserId();
     const accessToken = userId ? await getAccessToken() : null;
@@ -50,6 +56,7 @@ async function getSessionToken(): Promise<{ userId: string; cookieValue: string 
       const cookieValue = `${userId}%3A%3A${accessToken}`;
       if (COOKIE_SAFE_RE.test(cookieValue)) {
         log(`token 来源: 自动 (${userId.slice(0, 10)}...)`);
+        authSource = "auto";
         return { userId, cookieValue };
       }
     }
@@ -64,6 +71,7 @@ async function getSessionToken(): Promise<{ userId: string; cookieValue: string 
     const manualUserId = manualToken.split("%3A%3A")[0];
     if (!/^user_[a-zA-Z0-9]{20,}$/.test(manualUserId)) return null;
     log(`token 来源: 手动 (${manualUserId.slice(0, 10)}...)`);
+    authSource = "manual";
     return { userId: manualUserId, cookieValue: manualToken };
   }
   autoTokenFailed = false;
@@ -104,9 +112,10 @@ export async function fetchUsage(fullEvents = false): Promise<FetchResult> {
     snapshot: {
       timestamp: new Date(),
       ...parsed,
+      accountId: session.userId,
       aggregations,
       events: eventsResult.events,
-      eventsComplete: fullEvents,
+      eventsComplete: eventsResult.complete,
       totalTokens,
     },
     error: null,
@@ -145,7 +154,7 @@ function parseCents(value: unknown): number | null {
  * Team/Enterprise: individualUsage.overall used/limit (cents) → $ used/$ limit.
  * Never multiply tokens by list prices; only display cents the API returns.
  */
-function parseSummary(data: Record<string, unknown>): Omit<UsageSnapshot, "timestamp" | "aggregations" | "events" | "eventsComplete" | "totalTokens"> {
+function parseSummary(data: Record<string, unknown>): Omit<UsageSnapshot, "timestamp" | "accountId" | "aggregations" | "events" | "eventsComplete" | "totalTokens"> {
   const individual = (data.individualUsage as Record<string, unknown> | undefined) || {};
   const plan = (individual.plan as Record<string, unknown> | undefined) || {};
   const overall = (individual.overall as Record<string, unknown> | undefined) || {};
@@ -260,7 +269,7 @@ function mapUsageEvent(e: unknown): UsageEvent {
     cacheWriteTokens: cacheWrite,
     cacheReadTokens: cacheRead,
     totalTokens: input + output + cacheWrite + cacheRead,
-    totalCents: parseCents(tok.totalCents) ?? parseCents(row.chargedCents) ?? 0,
+    totalCents: parseCents(tok.totalCents) ?? parseCents(row.chargedCents),
   };
 }
 
@@ -269,7 +278,7 @@ async function fetchUsageEvents(
   startMs: number,
   endMs: number,
   maxPages = EVENT_MAX_PAGES,
-): Promise<{ events: UsageEvent[]; error: boolean }> {
+): Promise<{ events: UsageEvent[]; error: boolean; complete: boolean }> {
   const pageSize = EVENT_PAGE_SIZE;
   const events: UsageEvent[] = [];
   let page = 1;
@@ -286,23 +295,25 @@ async function fetchUsageEvents(
     if (!Array.isArray(rows)) {
       if (page === 1) {
         log("get-filtered-usage-events 无数据");
-        return { events: [], error: true };
+        return { events: [], error: true, complete: false };
       }
       log(`get-filtered-usage-events 第 ${page} 页失败，使用已拉取的 ${events.length} 条`);
-      return { events, error: false };
+      return { events, error: true, complete: false };
     }
     events.push(...rows.map(mapUsageEvent));
     const total = toInt(data?.totalUsageEventsCount);
     log(`获取到第 ${page} 页 ${rows.length} 条用量事件 (累计 ${events.length}${total > 0 ? `/${total}` : ""})`);
-    if (rows.length < pageSize) break;
-    if (total > 0 && events.length >= total) break;
+    if (total > 0 ? events.length >= total : rows.length < pageSize) {
+      return { events, error: false, complete: true };
+    }
+    if (rows.length === 0) return { events, error: true, complete: false };
     page += 1;
     if (page > pageLimit) truncated = true;
   }
   if (truncated) {
     log(`事件达到页数上限 ${pageLimit}（${EVENT_PAGE_SIZE}/页），已截断`);
   }
-  return { events, error: false };
+  return { events, error: false, complete: false };
 }
 
 function toInt(value: unknown): number {

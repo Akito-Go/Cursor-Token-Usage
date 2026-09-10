@@ -1,4 +1,6 @@
 import * as vscode from "vscode";
+import { budgetProgress, BudgetMetric } from "./budget";
+import { summarizeToday } from "./today";
 import { UsageSnapshot } from "./models";
 import { formatCents, formatEventTime, formatPct, formatTokens, isZh, membershipLabel, shortenModel } from "./treeView";
 
@@ -56,8 +58,8 @@ export class UsagePanel {
     this.panel.webview.html = renderHtml(this.panel.webview, this.getSnapshot(), this.getError());
   }
 
-  markStale(): void {
-    void this.panel.webview.postMessage({ command: "stale" });
+  updateStatus(stale: boolean): void {
+    void this.panel.webview.postMessage({ command: "status", stale, error: this.getError() });
   }
 }
 
@@ -177,7 +179,7 @@ function renderTrend(snapshot: UsageSnapshot): string {
       output: e.outputTokens,
       cache: e.cacheWriteTokens + e.cacheReadTokens,
       tokens: e.totalTokens,
-      cents: e.totalCents,
+      cents: e.totalCents ?? 0,
     }));
   if (points.length === 0) {
     return `<p class="empty">${escapeHtml(vscode.l10n.t("Not enough event data for a trend"))}</p>`;
@@ -228,6 +230,40 @@ function heroHeadline(snapshot: UsageSnapshot): string {
   return `C ${c}  ·  O ${o}`;
 }
 
+function renderToday(snapshot: UsageSnapshot): string {
+  const today = summarizeToday(snapshot);
+  const amount = today.reportedCents === null ? vscode.l10n.t("Cost unavailable") : formatCents(today.reportedCents);
+  const scope = today.historyComplete ? vscode.l10n.t("Loaded history for today") : vscode.l10n.t("Partial history: totals include available events only");
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const rows = today.models.slice(0, 3).map(row => `<div class="meter-head"><span>${escapeHtml(shortenModel(row.model))}</span><strong>${escapeHtml(formatTokens(row.tokens))}</strong></div>`).join("");
+  return `<section><h2>${escapeHtml(vscode.l10n.t("Today"))}</h2>
+    <div class="daily-stats">
+      <div class="stat-pill">${escapeHtml(vscode.l10n.t("Reported cost"))}<strong>${escapeHtml(amount)}</strong></div>
+      <div class="stat-pill">${escapeHtml(vscode.l10n.t("Tokens"))}<strong>${escapeHtml(formatTokens(today.tokens))}</strong></div>
+      <div class="stat-pill">${escapeHtml(vscode.l10n.t("Requests"))}<strong>${today.requests}</strong></div>
+    </div>
+    <p class="hint">${escapeHtml(scope)} · ${escapeHtml(zone)}</p>
+    <p class="hint">${escapeHtml(vscode.l10n.t("Current billing cycle; data as of {0}", snapshot.timestamp.toLocaleString()))}</p>
+    ${today.missingCosts ? `<p class="hint">${escapeHtml(vscode.l10n.t("Cost is missing for {0} request(s); only known amounts are shown.", today.missingCosts))}</p>` : ""}
+    <p class="hint">${escapeHtml(vscode.l10n.t("Event costs are reported by the API and may differ from the invoice."))}</p>
+    ${rows ? `<h2>${escapeHtml(vscode.l10n.t("Top models today"))}</h2>${rows}` : ""}
+  </section>`;
+}
+
+function renderBudget(snapshot: UsageSnapshot): string {
+  const config = vscode.workspace.getConfiguration("cursorTokenUsage");
+  const progress = budgetProgress(snapshot, config.get("budgetAmount", 0), config.get<BudgetMetric>("budgetMetric", "onDemand"));
+  const title = `<h2>${escapeHtml(vscode.l10n.t("Billing-cycle budget"))}</h2>`;
+  if (!progress) return `<section>${title}<p class="hint">${escapeHtml(vscode.l10n.t("No budget configured. Use Configure Budget to set an amount."))}</p></section>`;
+  const label = progress.metric === "included" ? vscode.l10n.t("Included usage") : vscode.l10n.t("On-Demand");
+  const content = progress.percent === null
+    ? `<p>${escapeHtml(label)} · ${escapeHtml(vscode.l10n.t("Budget: {0}. Selected usage amount is unavailable.", formatCents(progress.budgetCents)))}</p>`
+    : meter(label, `${formatCents(progress.usedCents!)} / ${formatCents(progress.budgetCents)}`, progress.percent);
+  return `<section>${title}${content}<p class="hint">${escapeHtml(config.get("alertEnabled", true)
+    ? vscode.l10n.t("Alerts at 50%, 80% and 100%; reached levels are remembered across reloads.")
+    : vscode.l10n.t("Usage alerts are disabled; budget notifications are paused."))}</p></section>`;
+}
+
 function renderHtml(webview: vscode.Webview, snapshot: UsageSnapshot | null, error: string | null): string {
   const nonce = String(Date.now());
   const csp = `default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';`;
@@ -237,6 +273,8 @@ function renderHtml(webview: vscode.Webview, snapshot: UsageSnapshot | null, err
       <button data-cmd="token">${escapeHtml(vscode.l10n.t("Set Session Token"))}</button>
       <button data-cmd="align">${escapeHtml(vscode.l10n.t("Status bar side"))}</button>
       <button data-cmd="alerts">${escapeHtml(vscode.l10n.t("Configure Usage Alerts"))}</button>
+      <button data-cmd="budget">${escapeHtml(vscode.l10n.t("Configure Budget"))}</button>
+      <button data-cmd="diagnostics">${escapeHtml(vscode.l10n.t("Connection diagnostics"))}</button>
     </div>`;
 
   let body: string;
@@ -310,7 +348,11 @@ function renderHtml(webview: vscode.Webview, snapshot: UsageSnapshot | null, err
       </header>
       ${ring(heroPct(snapshot), heroHeadline(snapshot), countdown(snapshot.billingCycleEnd), snapshot.isUnlimited)}
       ${actions}
-      <section><h2>${escapeHtml(vscode.l10n.t("Usage Trend"))}</h2>${renderTrend(snapshot)}</section>
+      ${renderToday(snapshot)}
+      ${renderBudget(snapshot)}
+      <section><h2>${escapeHtml(vscode.l10n.t("Usage Trend"))}</h2>
+      ${!snapshot.eventsComplete ? `<p class="stale-banner">${escapeHtml(vscode.l10n.t("Usage history is incomplete. Refresh to retry; charts show fetched events only."))}</p>` : ""}
+      ${renderTrend(snapshot)}</section>
       <section><h2>${escapeHtml(vscode.l10n.t("Billing Cycle"))}</h2>${meters.join("") || `<p class="empty">${escapeHtml(vscode.l10n.t("No data"))}</p>`}</section>
       <section><h2>${escapeHtml(vscode.l10n.t("By Model ({0})", snapshot.aggregations.length))}</h2>
         <p class="hint">${escapeHtml(vscode.l10n.t("Click a model row to filter the trend"))}</p>
@@ -361,6 +403,7 @@ header h1 { margin: 0; font-size: 20px; letter-spacing: .01em; }
   background: var(--vscode-badge-background); color: var(--vscode-badge-foreground);
   font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
 }
+.daily-stats { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
 .stat-pill { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; color: var(--muted); min-width: 110px; }
 .stat-pill strong { display: block; color: var(--text); font-size: 16px; }
 .hero {
@@ -444,6 +487,7 @@ th { color: var(--muted); font-weight: 500; }
 </head>
 <body>
 <div class="wrap">
+<p class="stale-banner" id="error-banner" role="status" ${error && snapshot ? "" : "hidden"}>${escapeHtml(error || "")}</p>
 <p class="stale-banner" id="stale-banner" hidden>${escapeHtml(vscode.l10n.t("Status bar updated. Click Refresh for details."))}</p>
 ${body}
 </div>
@@ -451,7 +495,14 @@ ${body}
 const vscode = acquireVsCodeApi();
 window.addEventListener("message", (event) => {
   const banner = document.getElementById("stale-banner");
-  if (banner && event.data && event.data.command === "stale") banner.hidden = false;
+  if (event.data && event.data.command === "status") {
+    if (banner && event.data.stale) banner.hidden = false;
+    const errorBanner = document.getElementById("error-banner");
+    if (errorBanner) {
+      errorBanner.textContent = event.data.error || "";
+      errorBanner.hidden = !event.data.error;
+    }
+  }
 });
 for (const btn of document.querySelectorAll("[data-cmd]")) {
   btn.addEventListener("click", () => vscode.postMessage({ command: btn.dataset.cmd }));

@@ -4,11 +4,14 @@
  */
 import * as vscode from "vscode";
 import {
+  getAuthSource,
   deleteSecretToken,
   initSecretStorage,
   storeSecretToken,
 } from "./api";
 import { setAutoReadEnabled } from "./credentials";
+import { BudgetMetric, BudgetMonitor } from "./budget";
+import { summarizeToday } from "./today";
 import { UsageAlert, UsageSnapshot } from "./models";
 import { UsagePanel } from "./panel";
 import { UsageTracker } from "./tracker";
@@ -20,6 +23,8 @@ let mainStatusBar: vscode.StatusBarItem;
 let extensionContext: vscode.ExtensionContext;
 let windowFocused = true;
 let suppressStale = false;
+let budgetMonitor: BudgetMonitor;
+let diagnosticsChannel: vscode.OutputChannel;
 
 const STATUS_ICON = "$(graph)";
 const CONSENT_KEY = "cursorTokenUsage.localSessionConsent";
@@ -29,12 +34,16 @@ export function activate(context: vscode.ExtensionContext): void {
   initSecretStorage(context.secrets);
   extensionContext = context;
   tracker = new UsageTracker();
+  budgetMonitor = new BudgetMonitor(context.globalState);
+  diagnosticsChannel = vscode.window.createOutputChannel("Cursor Token Usage - Diagnostics");
+  context.subscriptions.push(diagnosticsChannel);
 
   recreateStatusBar();
 
   tracker.onUpdate = () => {
     updateStatusBar();
-    if (!suppressStale && !tracker.lastError) UsagePanel.current?.markStale();
+    UsagePanel.current?.updateStatus(!suppressStale && !tracker.lastError);
+    void checkBudget();
   };
   tracker.onAlert = (alerts) => showAlerts(alerts);
 
@@ -45,12 +54,17 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("cursor-token-usage.setPollingInterval", setPollingInterval),
     vscode.commands.registerCommand("cursor-token-usage.setStatusBarAlignment", setStatusBarAlignment),
     vscode.commands.registerCommand("cursor-token-usage.configureAlerts", configureAlerts),
+    vscode.commands.registerCommand("cursor-token-usage.configureBudget", configureBudget),
+    vscode.commands.registerCommand("cursor-token-usage.showDiagnostics", showDiagnostics),
     vscode.window.onDidChangeWindowState((state) => {
       windowFocused = state.focused;
       startPolling();
       if (state.focused && hasPollConsumer()) void tracker.poll();
     }),
     vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration("cursorTokenUsage.budgetAmount") || e.affectsConfiguration("cursorTokenUsage.budgetMetric")) {
+        UsagePanel.current?.refresh();
+      }
       if (e.affectsConfiguration("cursorTokenUsage.statusBarAlignment")) recreateStatusBar();
       else if (e.affectsConfiguration("cursorTokenUsage")) updateStatusBar();
       if (
@@ -210,7 +224,14 @@ function updateStatusBar(): void {
     const o = formatPct(snapshot.otherModelsPercent, snapshot.isUnlimited);
     mainStatusBar.text = `${STATUS_ICON} C ${c} · O ${o}`;
   }
-  mainStatusBar.tooltip = buildTooltip(snapshot);
+  const warning = tracker.dataWarning;
+  mainStatusBar.tooltip = [warning, buildTooltip(snapshot)].filter(Boolean).join("\n");
+  if (warning) {
+    mainStatusBar.text = `$(warning) ${mainStatusBar.text.replace(`${STATUS_ICON} `, "")}`;
+    mainStatusBar.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
+    mainStatusBar.color = new vscode.ThemeColor("statusBarItem.warningForeground");
+    return;
+  }
   const ratio = usageRatio(snapshot);
   if (!snapshot.isUnlimited && ratio !== null && ratio >= 1) {
     mainStatusBar.backgroundColor = new vscode.ThemeColor("statusBarItem.errorBackground");
@@ -225,6 +246,7 @@ function updateStatusBar(): void {
 }
 
 function buildTooltip(snapshot: UsageSnapshot): string {
+  const today = summarizeToday(snapshot);
   const lines = [
     `Cursor Token Usage · ${membershipLabel(snapshot.membershipType)}`,
     snapshot.displayMode === "overall" && snapshot.overallUsedCents !== null && snapshot.overallLimitCents !== null
@@ -241,6 +263,8 @@ function buildTooltip(snapshot: UsageSnapshot): string {
         }`
       : "",
     `${vscode.l10n.t("Total Tokens")}: ${formatTokens(snapshot.totalTokens)}`,
+    vscode.l10n.t("Today: {0} tokens, {1} requests ({2})", formatTokens(today.tokens), today.requests,
+      today.historyComplete ? vscode.l10n.t("loaded history") : vscode.l10n.t("partial history")),
     vscode.l10n.t("Click to view details"),
   ];
   return lines.filter((line) => line).join("\n");
@@ -272,12 +296,14 @@ function showDetails(): void {
   UsagePanel.show(
     extensionContext,
     () => tracker.lastSnapshot,
-    () => tracker.lastError,
+    () => tracker.dataWarning,
     (command) => {
       if (command === "refresh") void refresh();
       if (command === "token") void setToken();
       if (command === "align") void setStatusBarAlignment();
       if (command === "alerts") void configureAlerts();
+      if (command === "budget") void configureBudget();
+      if (command === "diagnostics") showDiagnostics();
     },
     () => startPolling(),
   );
@@ -420,4 +446,79 @@ function showAlerts(alerts: UsageAlert[]): void {
     }
   });
   vscode.window.showWarningMessage(`${vscode.l10n.t("Cursor Usage Alert")}: ${messages.join(" · ")}`);
+}
+
+async function checkBudget(): Promise<void> {
+  const snapshot = tracker.lastSnapshot;
+  const config = vscode.workspace.getConfiguration("cursorTokenUsage");
+  if (!snapshot || tracker.lastError || !config.get("alertEnabled", true)) return;
+  try {
+    const notice = await budgetMonitor.check(snapshot, config.get("budgetAmount", 0), config.get<BudgetMetric>("budgetMetric", "onDemand"));
+    if (notice) {
+      const label = notice.metric === "included" ? vscode.l10n.t("Included usage") : vscode.l10n.t("On-Demand");
+      void vscode.window.showWarningMessage(vscode.l10n.t("Budget alert: {0} reached {1}% ({2} / {3})",
+        label, notice.milestone, formatCents(notice.usedCents!), formatCents(notice.budgetCents)));
+    }
+  } catch {
+    void vscode.window.showWarningMessage(vscode.l10n.t("Could not save budget alert state. The alert will be retried on the next poll."));
+  }
+}
+
+async function configureBudget(): Promise<void> {
+  const config = vscode.workspace.getConfiguration("cursorTokenUsage");
+  const metric = await vscode.window.showQuickPick([
+    { label: vscode.l10n.t("On-Demand"), id: "onDemand" },
+    { label: vscode.l10n.t("Included usage"), id: "included" },
+  ].map(item => ({ ...item, description: config.get("budgetMetric", "onDemand") === item.id ? "✓" : "" })),
+  { placeHolder: vscode.l10n.t("Choose which billing-cycle amount to monitor") });
+  if (!metric) return;
+  const amount = await vscode.window.showInputBox({
+    prompt: vscode.l10n.t("Billing-cycle budget in USD (0 disables budget alerts)"),
+    value: String(config.get("budgetAmount", 0)),
+    validateInput: value => {
+      const number = Number(value);
+      return !value.trim() || !Number.isFinite(number) || number < 0 || number > 1e9 ||
+        Math.abs(number * 100 - Math.round(number * 100)) > 0.00001
+        ? vscode.l10n.t("Enter a non-negative USD amount with at most two decimal places (maximum 1000000000)") : null;
+    },
+  });
+  if (amount === undefined) return;
+  await config.update("budgetMetric", metric.id, vscode.ConfigurationTarget.Global);
+  await config.update("budgetAmount", Number(amount), vscode.ConfigurationTarget.Global);
+  UsagePanel.current?.refresh();
+  await checkBudget();
+}
+
+function showDiagnostics(): void {
+  const diag = tracker.diagnostics;
+  const snapshot = tracker.lastSnapshot;
+  const stateLabels: Record<string, string> = {
+    unknown: vscode.l10n.t("Unknown (poll did not finish)"),
+    notRequested: vscode.l10n.t("Not requested"), pending: vscode.l10n.t("Pending"),
+    ok: vscode.l10n.t("Succeeded"), failed: vscode.l10n.t("Failed or unavailable"), partial: vscode.l10n.t("Partial history"),
+  };
+  const source = getAuthSource();
+  const sourceLabel = source === "auto" ? vscode.l10n.t("Local Cursor session")
+    : source === "manual" ? vscode.l10n.t("Manually supplied token") : vscode.l10n.t("Unavailable");
+  const date = (value: Date | null) => value?.toLocaleString() || vscode.l10n.t("Never");
+  const lines = [
+    vscode.l10n.t("Connection diagnostics"),
+    vscode.l10n.t("Captured at: {0}", new Date().toLocaleString()),
+    vscode.l10n.t("Authentication source: {0}", sourceLabel),
+    vscode.l10n.t("Last attempt: {0}", date(diag.lastAttempt)),
+    vscode.l10n.t("Last successful summary: {0}", date(diag.lastSuccess)),
+    vscode.l10n.t("Usage summary: {0}", stateLabels[diag.summary]),
+    vscode.l10n.t("Usage events: {0}", stateLabels[diag.events]),
+    vscode.l10n.t("Model totals: {0}", stateLabels[diag.aggregations]),
+    vscode.l10n.t("Consecutive failures: {0}", diag.failures),
+    vscode.l10n.t("Polling: {0}", !hasPollConsumer() ? vscode.l10n.t("Paused") : diag.running ? vscode.l10n.t("In progress") : vscode.l10n.t("Waiting")),
+    vscode.l10n.t("Current polling interval: {0}s", currentIntervalSeconds()),
+    vscode.l10n.t("Cached events: {0} ({1})", snapshot?.events.length || 0,
+      snapshot?.eventsComplete ? vscode.l10n.t("Complete") : vscode.l10n.t("Incomplete or unavailable")),
+    tracker.dataWarning || "",
+    vscode.l10n.t("Run Refresh Token Usage, then reopen diagnostics to see updated results."),
+  ];
+  diagnosticsChannel.clear();
+  diagnosticsChannel.appendLine(lines.filter(Boolean).join("\n"));
+  diagnosticsChannel.show(true);
 }

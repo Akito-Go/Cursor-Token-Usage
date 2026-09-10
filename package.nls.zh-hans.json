@@ -10,15 +10,19 @@
   "cmd.configureAlerts": "配置用量提醒",
   "config.title": "Cursor Token Usage",
   "config.displayCount": "详情面板最近用量列表显示条数（不影响趋势图拉取范围）",
-  "config.pollingInterval": "刷新间隔（秒）",
+  "config.pollingInterval": "一次轮询完成后等待的秒数；窗口失焦或请求失败时可能延长",
   "config.showStatusBar": "在状态栏显示用量",
   "config.statusBarAlignment": "状态栏位置：left 或 right",
   "config.alertEnabled": "启用用量变化提醒",
   "config.alertItems": "要监控的指标",
-  "config.alertThreshold.newSession": "单次轮询新增事件达到此数量时提醒",
+  "config.alertThreshold.newSession": "本次拉取中新观察到的请求达到此数量时提醒；后台每次最多检查 100 条事件",
   "config.alertThreshold.overallSpending": "套餐内花费增长达到此金额（美元）时提醒",
   "config.alertThreshold.cursorModels": "Cursor Models 池占比增长达到此百分点时提醒",
   "config.alertThreshold.otherModels": "Other Models 池占比增长达到此百分点时提醒",
   "config.alertThreshold.onDemandSpending": "按需花费增长达到此金额（美元）时提醒",
-  "config.alertThreshold.totalTokens": "Token 总量增长达到此数量时提醒"
+  "config.alertThreshold.totalTokens": "Token 总量增长达到此数量时提醒",
+  "cmd.configureBudget": "配置周期预算",
+  "cmd.showDiagnostics": "查看连接诊断",
+  "config.budgetAmount": "账单周期预算（美元）；0 为关闭，在达到 50%、80%、100% 时提醒，受用量提醒总开关控制",
+  "config.budgetMetric": "预算监控口径：onDemand 为按需费用，included 为套餐内用量金额；只使用接口返回金额"
 }

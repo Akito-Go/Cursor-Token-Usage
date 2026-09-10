@@ -2,7 +2,7 @@
   "name": "cursor-token-usage",
   "displayName": "%displayName%",
   "description": "%description%",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "publisher": "akitogo",
   "license": "MIT",
   "icon": "icon.png",
@@ -30,11 +30,29 @@
       { "command": "cursor-token-usage.setToken", "title": "%cmd.setToken%" },
       { "command": "cursor-token-usage.setPollingInterval", "title": "%cmd.setPollingInterval%" },
       { "command": "cursor-token-usage.setStatusBarAlignment", "title": "%cmd.setStatusBarAlignment%" },
-      { "command": "cursor-token-usage.configureAlerts", "title": "%cmd.configureAlerts%" }
+      { "command": "cursor-token-usage.configureAlerts", "title": "%cmd.configureAlerts%" },
+      { "command": "cursor-token-usage.configureBudget", "title": "%cmd.configureBudget%" },
+      { "command": "cursor-token-usage.showDiagnostics", "title": "%cmd.showDiagnostics%" }
     ],
     "configuration": {
       "title": "%config.title%",
       "properties": {
+        "cursorTokenUsage.budgetAmount": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 1000000000,
+          "multipleOf": 0.01,
+          "scope": "application",
+          "description": "%config.budgetAmount%"
+        },
+        "cursorTokenUsage.budgetMetric": {
+          "type": "string",
+          "enum": ["onDemand", "included"],
+          "default": "onDemand",
+          "scope": "application",
+          "description": "%config.budgetMetric%"
+        },
         "cursorTokenUsage.displayCount": {
           "type": "number",
           "default": 5,
@@ -115,6 +133,8 @@
   },
   "scripts": {
     "compile": "tsc -p ./",
+    "test": "npm run compile && node --test tests/*.test.cjs",
+    "vscode:prepublish": "npm run compile",
     "watch": "tsc -watch -p ./"
   },
   "devDependencies": {

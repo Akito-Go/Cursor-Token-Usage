@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { fetchUsage } from "./api";
-import { FetchResult, UsageAlert, UsageSnapshot } from "./models";
+import { FetchResult, UsageAlert, UsageEvent, UsageSnapshot } from "./models";
 
 const log = vscode.window.createOutputChannel("Cursor Token Usage - Tracker");
 
@@ -13,11 +13,13 @@ export class UsageTracker {
   private _lastSuccessTime: Date | null = null;
   private _onUpdate: (() => void) | null = null;
   private _onAlert: ((alerts: UsageAlert[]) => void) | null = null;
-  private _polling = false;
-  private _pollStartTime = 0;
-  private _pollCount = 0;
-  private _queuedFull = false;
-  private _idleWaiters: Array<() => void> = [];
+  private _lastAttempt: Date | null = null;
+  private _endpointStates = { summary: "notRequested", events: "notRequested", aggregations: "notRequested" };
+  get diagnostics() {
+    return { lastAttempt: this._lastAttempt, lastSuccess: this._lastSuccessTime,
+      running: !!this._running, failures: this._consecutiveFailures, ...this._endpointStates };
+  }
+
   private _running: Promise<boolean> | null = null;
 
   set onUpdate(callback: () => void) {
@@ -48,122 +50,135 @@ export class UsageTracker {
     return this._consecutiveFailures;
   }
 
+  get dataWarning(): string | null {
+    const warnings: string[] = [];
+    if (this._lastError) {
+      warnings.push(this._lastError);
+      if (this._lastSuccessTime) {
+        warnings.push(vscode.l10n.t("Showing cached usage from {0}", this._lastSuccessTime.toLocaleString()));
+      }
+    }
+    if (this._eventsError) warnings.push(vscode.l10n.t("Failed to fetch some usage events. Details may be incomplete."));
+    if (this._aggError) warnings.push(vscode.l10n.t("Failed to fetch model totals. Token totals may be outdated."));
+    return warnings.length ? warnings.join(" ") : null;
+  }
+
   get lastSuccessTime(): Date | null {
     return this._lastSuccessTime;
   }
 
-  private notifyIdle(): void {
-    const waiters = this._idleWaiters.splice(0);
-    for (const wait of waiters) wait();
-  }
-
-  private waitIdle(): Promise<void> {
-    if (!this._polling && !this._running) return Promise.resolve();
-    return new Promise((resolve) => this._idleWaiters.push(resolve));
-  }
-
   async poll(force = false, opts?: { fullEvents?: boolean }): Promise<boolean> {
-    const fullEvents = !!opts?.fullEvents;
-    if (fullEvents) this._queuedFull = true;
-
     if (this._running) {
-      const elapsed = Date.now() - this._pollStartTime;
-      if (!force && elapsed <= 120000) {
-        log.appendLine(`[${new Date().toISOString()}] poll SKIPPED${fullEvents ? " (queued full)" : ""}`);
-        return false;
-      }
-      if (force) {
-        log.appendLine(`[${new Date().toISOString()}] poll waiting for in-flight${fullEvents ? " then full" : ""}`);
-        await this.waitIdle();
-        return this.poll(false, { fullEvents: fullEvents || this._queuedFull });
-      }
-      log.appendLine(`[${new Date().toISOString()}] poll 上次轮询超时，强制重置`);
-      this._pollCount++;
-      this._running = null;
-      this._polling = false;
-      this.notifyIdle();
+      if (!force && !opts?.fullEvents) return false;
+      // A details refresh must finish its own fetch after the current poll.
+      await this._running;
+      return this.poll(force, opts);
     }
-
-    const runFull = fullEvents || this._queuedFull;
-    this._queuedFull = false;
-    const task = this.runPoll(runFull);
-    this._running = task.finally(() => {
-      if (this._running === task) this._running = null;
-      this._polling = false;
-      const hasWaiters = this._idleWaiters.length > 0;
-      const followUp = this._queuedFull && !hasWaiters && !runFull;
-      this.notifyIdle();
-      if (followUp) void this.poll(false, { fullEvents: true });
+    const running = this.runPoll(!!opts?.fullEvents).finally(() => {
+      if (this._running === running) this._running = null;
     });
-    return task;
+    this._running = running;
+    return running;
   }
 
   private async runPoll(fullEvents: boolean): Promise<boolean> {
-    this._pollCount++;
-    const pollId = this._pollCount;
-    const ts = new Date().toISOString();
-    this._polling = true;
-    this._pollStartTime = Date.now();
+    this._lastAttempt = new Date();
+    this._endpointStates = { summary: "pending", events: "pending", aggregations: "pending" };
+    const ts = this._lastAttempt.toISOString();
+    let timeout: NodeJS.Timeout | undefined;
     try {
       const result = await Promise.race<FetchResult>([
         fetchUsage(fullEvents),
-        new Promise((resolve) =>
-          setTimeout(
+        new Promise((resolve) => {
+          timeout = setTimeout(
             () => resolve({ snapshot: null, error: vscode.l10n.t("Timed out fetching usage"), eventsError: false, aggError: false }),
             90000,
-          ),
-        ),
+          );
+        }),
       ]);
       if (!result.snapshot) {
+        this._endpointStates = result.error === vscode.l10n.t("Timed out fetching usage")
+          ? { summary: "unknown", events: "unknown", aggregations: "unknown" }
+          : { summary: "failed", events: "notRequested", aggregations: "notRequested" };
         this._lastError = result.error;
         this._consecutiveFailures++;
-        log.appendLine(`[${ts}] poll#${pollId} 失败: ${result.error}`);
+        log.appendLine(`[${ts}] poll 失败: ${result.error}`);
         this._onUpdate?.();
         return false;
       }
-      if (pollId !== this._pollCount) {
-        log.appendLine(`[${ts}] poll#${pollId} 已过期，丢弃结果`);
-        return false;
-      }
-
+      this._endpointStates = { summary: "ok", events: result.eventsError ? "failed" : result.snapshot.eventsComplete ? "ok" : "partial",
+        aggregations: result.aggError ? "failed" : "ok" };
       const wasRecovering = this._consecutiveFailures > 0;
       this._lastError = null;
       this._consecutiveFailures = 0;
       this._lastSuccessTime = new Date();
+      const previousEventsError = this._eventsError;
+      const previousAggError = this._aggError;
       this._eventsError = result.eventsError;
       this._aggError = result.aggError;
 
       const prev = this._lastSnapshot;
       let snapshot = result.snapshot;
-      if (prev?.eventsComplete && !snapshot.eventsComplete) {
-        const seen = new Set(prev.events.map((e) => `${e.timestamp}|${e.model}|${e.kind}`));
-        const extras = snapshot.events.filter((e) => !seen.has(`${e.timestamp}|${e.model}|${e.kind}`));
-        const events = extras.length > 0 ? [...extras, ...prev.events] : prev.events;
-        snapshot = { ...snapshot, events, eventsComplete: true };
-        log.appendLine(`[${ts}] poll#${pollId} lite 合并 ${extras.length} 条新事件，共 ${events.length} 条`);
+      const sameCycle = !!prev && !!snapshot.billingCycleStart &&
+        prev.accountId === snapshot.accountId &&
+        prev.billingCycleStart === snapshot.billingCycleStart &&
+        prev.billingCycleEnd === snapshot.billingCycleEnd;
+      if (prev && sameCycle) {
+        if (!snapshot.eventsComplete) {
+          const events = mergeEvents(snapshot.events, prev.events);
+          const previousKeys = new Set(prev.events.map(eventKey));
+          const overlaps = snapshot.events.some((event) => previousKeys.has(eventKey(event)));
+          snapshot = {
+            ...snapshot,
+            events,
+            // Without overlap a one-page poll may have missed requests in between.
+            eventsComplete: !fullEvents && !result.eventsError && prev.eventsComplete && overlaps,
+          };
+        }
+        if (result.aggError) {
+          snapshot = { ...snapshot, aggregations: prev.aggregations, totalTokens: prev.totalTokens };
+        }
       }
       log.appendLine(
-        `[${ts}] poll#${pollId} 成功 full=${snapshot.eventsComplete} events=${snapshot.events.length} C=${snapshot.cursorModelsPercent} O=${snapshot.otherModelsPercent} totalPct=${snapshot.totalPercent} tokens=${snapshot.totalTokens}`,
+        `[${ts}] poll 成功 full=${snapshot.eventsComplete} events=${snapshot.events.length} C=${snapshot.cursorModelsPercent} O=${snapshot.otherModelsPercent} totalPct=${snapshot.totalPercent} tokens=${snapshot.totalTokens}`,
       );
       this._lastSnapshot = snapshot;
-      if (prev && !wasRecovering) this.checkAlerts(prev, snapshot);
+      if (prev && sameCycle && !wasRecovering) {
+        this.checkAlerts(prev, result.snapshot, !previousEventsError && !result.eventsError, !previousAggError && !result.aggError);
+      }
       this._onUpdate?.();
       return true;
     } catch (err) {
-      log.appendLine(`[${ts}] poll#${pollId} 异常: ${err}`);
+      this._endpointStates = { summary: "unknown", events: "unknown", aggregations: "unknown" };
+      this._lastError = vscode.l10n.t("Failed to fetch usage");
+      this._consecutiveFailures++;
+      log.appendLine(`[${ts}] poll 异常: ${err}`);
+      this._onUpdate?.();
       return false;
+    } finally {
+      if (timeout) clearTimeout(timeout);
     }
   }
 
-  private checkAlerts(prev: UsageSnapshot, curr: UsageSnapshot): void {
+  private checkAlerts(prev: UsageSnapshot, curr: UsageSnapshot, eventsValid: boolean, totalsValid: boolean): void {
     const config = vscode.workspace.getConfiguration("cursorTokenUsage");
     if (!config.get("alertEnabled", true)) return;
     const items = config.get<string[]>("alertItems", ["newSession", "cursorModels", "otherModels", "totalTokens"]);
     const alerts: UsageAlert[] = [];
 
-    if (items.includes("newSession") && prev.eventsComplete && curr.eventsComplete) {
-      const prevTs = new Set(prev.events.map((e) => e.timestamp));
-      const newCount = curr.events.filter((e) => !prevTs.has(e.timestamp)).length;
+    if (items.includes("newSession") && eventsValid) {
+      const latest = prev.events.reduce((max, event) => Math.max(max, eventTime(event)), 0);
+      const counts = eventCounts(prev.events);
+      const newCount = curr.events.filter((event) => {
+        const key = eventKey(event);
+        const count = counts.get(key) || 0;
+        if (count > 0) {
+          counts.set(key, count - 1);
+          return false;
+        }
+        // Opening details also loads older history; it is not new consumption.
+        return eventTime(event) >= latest;
+      }).length;
       const threshold = config.get("alertThreshold.newSession", 2);
       if (newCount >= threshold && newCount > 0) {
         alerts.push({ type: "newSession", delta: newCount, threshold });
@@ -197,7 +212,7 @@ export class UsageTracker {
         alerts.push({ type: "onDemandSpending", delta, threshold });
       }
     }
-    if (items.includes("totalTokens")) {
+    if (items.includes("totalTokens") && totalsValid) {
       const delta = curr.totalTokens - prev.totalTokens;
       const threshold = config.get("alertThreshold.totalTokens", 100000);
       if (delta > 0 && delta >= threshold) {
@@ -206,4 +221,33 @@ export class UsageTracker {
     }
     if (alerts.length > 0) this._onAlert?.(alerts);
   }
+}
+
+function eventTime(event: UsageEvent): number {
+  return event.timestamp > 0 && event.timestamp < 1e12 ? event.timestamp * 1000 : event.timestamp;
+}
+
+function eventKey(event: UsageEvent): string {
+  return JSON.stringify([eventTime(event), event.model, event.kind]);
+}
+
+function eventCounts(events: UsageEvent[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const event of events) {
+    const key = eventKey(event);
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return counts;
+}
+
+function mergeEvents(recent: UsageEvent[], previous: UsageEvent[]): UsageEvent[] {
+  const counts = eventCounts(recent);
+  const older = previous.filter((event) => {
+    const key = eventKey(event);
+    const count = counts.get(key) || 0;
+    if (count === 0) return true;
+    counts.set(key, count - 1);
+    return false;
+  });
+  return [...recent, ...older].sort((a, b) => eventTime(b) - eventTime(a));
 }
