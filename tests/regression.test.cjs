@@ -229,16 +229,18 @@ test('API page cap is explicitly incomplete', async () => {
   assert.equal(calls.filter(c => c.path.includes('filtered')).length, 30);
 });
 
-function panelFixture() {
+function panelFixture({ snap = snapshot(), config = {}, storage } = {}) {
   const vscode = vscodeMock();
+  vscode.workspace.getConfiguration = () => ({ get: (key, fallback) => config[key] ?? fallback });
   const helpers = { formatCents: String, formatEventTime: String, formatPct: String,
     formatTokens: String, isZh: () => false, membershipLabel: String, shortenModel: String };
   const { UsagePanel } = load('panel', { './treeView': helpers }, vscode);
   const posted = [];
-  const view = { webview: { html: '', postMessage: m => posted.push(m), onDidReceiveMessage() {} }, onDidDispose() {} };
+  let receive;
+  const view = { webview: { html: '', postMessage: m => posted.push(m), onDidReceiveMessage(callback) { receive = callback; } }, onDidDispose() {} };
   let error = 'offline <example>';
-  const panel = new UsagePanel(view, () => snapshot(), () => error, () => {});
-  return { panel, view, posted, recover: () => { error = null; } };
+  const panel = new UsagePanel(view, () => snap, () => error, () => {}, undefined, storage);
+  return { panel, view, posted, receive, recover: () => { error = null; } };
 }
 test('panel shows cached-data errors and incomplete history and receives failure/recovery updates', () => {
   const { panel, view, posted, recover } = panelFixture();
@@ -515,4 +517,86 @@ test('budget and diagnostic commands are wired to notifications, global settings
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(notices.length, 1);
   extension.deactivate();
+});
+
+test('collapsed cards retain partial-data warnings and budget progress without hiding trend', () => {
+  const { view } = panelFixture({ snap: snapshot({ onDemandUsedCents: 8200 }), config: { budgetAmount: 100 } });
+  const html = view.webview.html;
+  assert.match(html, /<details class="collapsible" data-section="today">/);
+  assert.match(html, /<details class="collapsible" data-section="budget">/);
+  const summaries = [...html.matchAll(/<summary>([\s\S]*?)<\/summary>/g)].map(match => match[1]);
+  assert.match(summaries[0], /Cost unavailable.*tokens.*Partial data/);
+  assert.match(summaries[1], /8200 \/ 10000.*82/);
+  assert.match(summaries[1], /var\(--warn\)/);
+  assert.ok(html.indexOf('Usage Trend') > html.lastIndexOf('</details>'));
+  const paused = panelFixture({ snap: snapshot({ onDemandUsedCents: 11000 }), config: { budgetAmount: 100, alertEnabled: false } });
+  assert.match(paused.view.webview.html.match(/data-section="budget">\s*<summary>([\s\S]*?)<\/summary>/)[1], /var\(--err\).*Alerts paused/);
+});
+test('independent section preferences survive refresh and new panels; invalid messages do not persist', async () => {
+  const storage = memoryState();
+  const { panel, receive, view } = panelFixture({ storage });
+  receive({ command: 'section', section: 'today', open: true });
+  receive({ command: 'section', section: 'budget', open: true });
+  receive({ command: 'section', section: 'budget', open: false });
+  receive({ command: 'section', section: 'unexpected', open: true });
+  receive({ command: 'section', section: 'today', open: 'false' });
+  receive(null);
+  await new Promise(resolve => setImmediate(resolve));
+  panel.refresh();
+  assert.match(view.webview.html, /data-section="today" open>/);
+  assert.match(view.webview.html, /data-section="budget">/);
+  const reopened = panelFixture({ storage });
+  assert.match(reopened.view.webview.html, /data-section="today" open>/);
+  assert.match(reopened.view.webview.html, /data-section="budget">/);
+  assert.equal(Object.keys(storage.get('cursorTokenUsage.panelSections')).length, 2);
+});
+test('folding, chart filters and resize share state without overwriting each other', () => {
+  const now = new Date();
+  const { view } = panelFixture({ snap: snapshot({
+    timestamp: now, events: [event(now.getTime())],
+    billingCycleStart: new Date(now.getFullYear(), now.getMonth(), 1).toISOString(),
+    billingCycleEnd: new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString(),
+  }) });
+  const html = view.webview.html;
+  const payload = JSON.parse(html.match(/id="trend-data">([^<]+)<\/script>/)[1]);
+  let state = { metric: 'token', model: 'model', from: payload.minDay, to: payload.maxDay,
+    sections: { today: true, budget: false }, untouched: 123 };
+  const posted = [];
+  function element(extra = {}) {
+    return { handlers: {}, addEventListener(type, callback) { this.handlers[type] = callback; }, ...extra };
+  }
+  const today = element({ dataset: { section: 'today' }, open: false });
+  const budget = element({ dataset: { section: 'budget' }, open: false });
+  const chart = element({ clientWidth: 800, innerHTML: '', querySelectorAll: () => [] });
+  const select = element({ value: '', options: [{ value: '' }, { value: 'model' }] });
+  const from = element(), to = element();
+  const nodes = { 'trend-data': { textContent: JSON.stringify(payload) }, 'trend-chart': chart,
+    'trend-from': from, 'trend-to': to, 'trend-model': select, 'trend-range': {}, 'trend-legend': {} };
+  let resize;
+  const script = html.match(/<script nonce="[^"]+">([\s\S]*?)<\/script>/)[1];
+  vm.runInNewContext(script, {
+    acquireVsCodeApi: () => ({ getState: () => state, setState: next => { state = next; }, postMessage: message => posted.push(message) }),
+    window: { addEventListener() {} },
+    document: { getElementById: id => nodes[id], querySelectorAll: selector => selector === 'details[data-section]' ? [today, budget] : [] },
+    ResizeObserver: class { constructor(callback) { resize = callback; } observe(target) { assert.equal(target, chart); } },
+  });
+  assert.equal(today.open, true);
+  assert.equal(budget.open, false);
+  assert.match(chart.innerHTML, /viewBox="0 0 784 300"/);
+  today.open = false; today.handlers.toggle();
+  assert.equal(state.model, 'model');
+  assert.equal(state.from, payload.minDay);
+  assert.equal(state.sections.today, false);
+  assert.equal(posted[0].command, 'section');
+  from.value = payload.maxDay; from.handlers.change();
+  select.value = ''; select.handlers.change();
+  assert.equal(state.sections.today, false);
+  assert.equal(state.sections.budget, false);
+  assert.equal(state.from, payload.maxDay);
+  assert.equal(state.model, '');
+  assert.equal(state.untouched, 123);
+  chart.clientWidth = 360; resize();
+  assert.match(chart.innerHTML, /viewBox="0 0 344 300"/);
+  assert.equal(state.from, payload.maxDay);
+  assert.equal(state.sections.today, false);
 });

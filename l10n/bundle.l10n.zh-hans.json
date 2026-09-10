@@ -171,5 +171,10 @@
   "Cached events: {0} ({1})": "缓存事件：{0} 条（{1}）",
   "Complete": "完整",
   "Incomplete or unavailable": "不完整或暂无数据",
-  "Run Refresh Token Usage, then reopen diagnostics to see updated results.": "执行“刷新用量”后重新打开诊断，可查看更新后的结果。"
+  "Run Refresh Token Usage, then reopen diagnostics to see updated results.": "执行“刷新用量”后重新打开诊断，可查看更新后的结果。",
+  "{0} tokens": "{0} Token",
+  "Partial data": "数据不完整",
+  "Not configured": "尚未配置",
+  "Usage unavailable": "暂无用量金额",
+  "Alerts paused": "提醒已暂停"
 }

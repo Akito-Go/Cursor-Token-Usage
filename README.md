@@ -49,7 +49,7 @@ cursor --install-extension akitogo.cursor-token-usage
 
 ### From a VSIX
 
-1. For this source version, build `cursor-token-usage-1.1.1.vsix` using [Build from Source](#build-from-source), or obtain the matching version from [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases) if published
+1. For this source version, build `cursor-token-usage-1.1.2.vsix` using [Build from Source](#build-from-source), or obtain the matching version from [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases) if published
 2. Drag it into Cursor, or `Cmd+Shift+P` (Windows: `Ctrl+Shift+P`) → `Extensions: Install from VSIX...`
 3. Run `Developer: Reload Window`
 
@@ -107,6 +107,10 @@ Details panel
 Bar colors: green < 40%, yellow < 80%, orange ≥ 80%, red ≥ 100%. Usage ≥ 80% tints the status bar warning; ≥ 100% tints it error.
 
 Panel buttons: Refresh, Set Session Token, status bar side, Configure Alerts, Configure Budget, Connection Diagnostics.
+
+**Today** and **Billing-cycle budget** are collapsed by default to keep the trend chart prominent. Click either heading (or focus it with Tab and press Enter/Space) to expand or collapse it. Collapsed summaries retain key amounts, tokens, budget progress and partial-data/paused-alert indicators. Each section's state is saved locally and restored after refresh, reopening the panel or reloading Cursor.
+
+The panel uses up to 1,000 px of available width. The trend chart is 300 px tall and redraws to fit the panel; date-label density adapts to its width. Collapsing a section or resizing the panel preserves the selected dates, model and Token/Cost tab.
 
 Trend chart: Token (stacked input / output / cache + line) or Cost (bars + line). Date inputs are bounded by the billing cycle and default to the last 7 days. The Cost tab only draws when the API returns cents. Background polls update the status bar and panel status banners while preserving the chart and date selection. Fetch errors appear immediately in an open panel; after recovery, a banner asks you to Refresh for current details.
 
@@ -205,7 +209,13 @@ npx @vscode/vsce package --no-dependencies
 
 `npm test` compiles the extension and runs regression tests with simulated API responses; it does not access a real Cursor account. Packaging also compiles automatically and excludes test files.
 
-This version produces `cursor-token-usage-1.1.1.vsix`. Install it, then run **Developer: Reload Window**. Building locally does not publish the package to Open VSX or GitHub Releases.
+This version produces `cursor-token-usage-1.1.2.vsix`. Install it, then run **Developer: Reload Window**. Building locally does not publish the package to Open VSX or GitHub Releases.
+
+## Changelog (1.1.2)
+
+- Make Today and Billing-cycle budget independently collapsible, initially collapsed with key values and warnings visible
+- Remember section states across refreshes, panel reopenings and editor reloads without overwriting chart filters
+- Widen the details layout and enlarge the trend chart; redraw the chart and adapt date labels when the panel resizes
 
 ## Changelog (1.1.1)
 
@@ -319,7 +329,7 @@ cursor --install-extension akitogo.cursor-token-usage
 
 #### 从 VSIX 安装
 
-1. 当前源码版本可按[从源码构建](#从源码构建)生成 `cursor-token-usage-1.1.1.vsix`；若对应版本已发布，也可从 [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases) 获取
+1. 当前源码版本可按[从源码构建](#从源码构建)生成 `cursor-token-usage-1.1.2.vsix`；若对应版本已发布，也可从 [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases) 获取
 2. 拖进 Cursor，或 `Cmd+Shift+P`（Windows：`Ctrl+Shift+P`）→ `Extensions: Install from VSIX...`
 3. 执行 `Developer: Reload Window`
 
@@ -377,6 +387,10 @@ cursor --install-extension akitogo.cursor-token-usage
 进度条：绿 < 40%、黄 < 80%、橙 ≥ 80%、红 ≥ 100%。用量 ≥ 80% 状态栏警告底色，≥ 100% 错误底色。
 
 面板按钮：刷新、设置 Session Token、状态栏位置、配置提醒、配置预算、连接诊断。
+
+**今日消费**和**账单周期预算**默认收起，把更多空间留给使用趋势。点击标题即可展开或收起，也可用 Tab 聚焦后按 Enter／空格操作。收起后仍展示关键金额、Token、预算进度及数据不完整／提醒暂停提示。两个区块各自保存本机展开状态，刷新、关闭重开面板及重载 Cursor 后都会恢复。
+
+面板最大可用宽度为 1,000 px，趋势图高度为 300 px，会随面板宽度重绘并调整日期标签密度。折叠区块或调整面板大小时，会保留日期、模型和 Token／费用选项。
 
 趋势图：Token（输入 / 输出 / 缓存堆叠 + 折线）或费用（柱 + 折线）。日期框范围是账单周期，默认近 7 天。费用 Tab 仅在接口返回美分时作图。后台轮询更新状态栏和面板提示，保留图表及日期选择。面板打开时会即时显示请求失败；恢复后提示点刷新查看最新详情。
 
@@ -475,7 +489,13 @@ npx @vscode/vsce package --no-dependencies
 
 `npm test` 会先编译，再运行基于模拟接口的回归测试，不访问真实 Cursor 账号。打包前也会自动编译，安装包不包含测试文件。
 
-当前版本生成 `cursor-token-usage-1.1.1.vsix`，安装后执行 **Developer: Reload Window**。本地构建不会发布到 Open VSX 或 GitHub Releases。
+当前版本生成 `cursor-token-usage-1.1.2.vsix`，安装后执行 **Developer: Reload Window**。本地构建不会发布到 Open VSX 或 GitHub Releases。
+
+### 更新说明（1.1.2）
+
+- 今日消费与账单周期预算支持独立折叠，默认收起，摘要保留关键数值和异常提示
+- 刷新、关闭重开面板及重载编辑器后恢复展开状态，不覆盖趋势图筛选条件
+- 加宽详情布局并增大趋势图，面板宽度变化时自动重绘并调整日期标签密度
 
 ### 更新说明（1.1.1）
 

@@ -4,11 +4,15 @@ import { summarizeToday } from "./today";
 import { UsageSnapshot } from "./models";
 import { formatCents, formatEventTime, formatPct, formatTokens, isZh, membershipLabel, shortenModel } from "./treeView";
 
+type SectionState = Partial<Record<"today" | "budget", boolean>>;
+const SECTION_STATE_KEY = "cursorTokenUsage.panelSections";
+
 export class UsagePanel {
   public static current: UsagePanel | undefined;
   private readonly panel: vscode.WebviewPanel;
   private readonly getSnapshot: () => UsageSnapshot | null;
   private readonly getError: () => string | null;
+  private sectionState: SectionState;
 
   static show(
     context: vscode.ExtensionContext,
@@ -28,7 +32,7 @@ export class UsagePanel {
       vscode.ViewColumn.Beside,
       { enableScripts: true, retainContextWhenHidden: true },
     );
-    UsagePanel.current = new UsagePanel(panel, getSnapshot, getError, onMessage, onClose);
+    UsagePanel.current = new UsagePanel(panel, getSnapshot, getError, onMessage, onClose, context.globalState);
     context.subscriptions.push(panel);
     return UsagePanel.current;
   }
@@ -39,12 +43,22 @@ export class UsagePanel {
     getError: () => string | null,
     onMessage: (command: string) => void,
     onClose?: () => void,
+    private readonly sectionStorage?: Pick<vscode.Memento, "get" | "update">,
   ) {
     this.panel = panel;
     this.getSnapshot = getSnapshot;
     this.getError = getError;
+    this.sectionState = sectionStorage?.get<SectionState>(SECTION_STATE_KEY, {}) || {};
     this.refresh();
-    panel.webview.onDidReceiveMessage((msg: { command?: string }) => {
+    panel.webview.onDidReceiveMessage((msg: { command?: string; section?: string; open?: boolean } | null) => {
+      if (!msg) return;
+      if (msg.command === "section") {
+        if ((msg.section === "today" || msg.section === "budget") && typeof msg.open === "boolean") {
+          this.sectionState = { ...this.sectionState, [msg.section]: msg.open };
+          void this.sectionStorage?.update(SECTION_STATE_KEY, this.sectionState).then(undefined, () => undefined);
+        }
+        return;
+      }
       if (msg.command) onMessage(msg.command);
     });
     panel.onDidDispose(() => {
@@ -55,7 +69,7 @@ export class UsagePanel {
 
   refresh(): void {
     this.panel.title = vscode.l10n.t("Cursor Token Usage");
-    this.panel.webview.html = renderHtml(this.panel.webview, this.getSnapshot(), this.getError());
+    this.panel.webview.html = renderHtml(this.panel.webview, this.getSnapshot(), this.getError(), this.sectionState);
   }
 
   updateStatus(stale: boolean): void {
@@ -230,13 +244,22 @@ function heroHeadline(snapshot: UsageSnapshot): string {
   return `C ${c}  ·  O ${o}`;
 }
 
-function renderToday(snapshot: UsageSnapshot): string {
+function collapsibleSection(id: "today" | "budget", title: string, summary: string, body: string, open: boolean, color = "var(--muted)"): string {
+  return `<details class="collapsible" data-section="${id}"${open ? " open" : ""}>
+    <summary><span class="section-title">${escapeHtml(title)}</span><span class="section-summary" style="color:${color}">${escapeHtml(summary)}</span></summary>
+    <div class="collapsible-body">${body}</div>
+  </details>`;
+}
+
+function renderToday(snapshot: UsageSnapshot, open: boolean): string {
   const today = summarizeToday(snapshot);
   const amount = today.reportedCents === null ? vscode.l10n.t("Cost unavailable") : formatCents(today.reportedCents);
   const scope = today.historyComplete ? vscode.l10n.t("Loaded history for today") : vscode.l10n.t("Partial history: totals include available events only");
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const rows = today.models.slice(0, 3).map(row => `<div class="meter-head"><span>${escapeHtml(shortenModel(row.model))}</span><strong>${escapeHtml(formatTokens(row.tokens))}</strong></div>`).join("");
-  return `<section><h2>${escapeHtml(vscode.l10n.t("Today"))}</h2>
+  const partial = !today.historyComplete || today.missingCosts > 0;
+  const summary = `${amount} · ${vscode.l10n.t("{0} tokens", formatTokens(today.tokens))}${partial ? ` · ${vscode.l10n.t("Partial data")}` : ""}`;
+  return collapsibleSection("today", vscode.l10n.t("Today"), summary, `
     <div class="daily-stats">
       <div class="stat-pill">${escapeHtml(vscode.l10n.t("Reported cost"))}<strong>${escapeHtml(amount)}</strong></div>
       <div class="stat-pill">${escapeHtml(vscode.l10n.t("Tokens"))}<strong>${escapeHtml(formatTokens(today.tokens))}</strong></div>
@@ -247,24 +270,29 @@ function renderToday(snapshot: UsageSnapshot): string {
     ${today.missingCosts ? `<p class="hint">${escapeHtml(vscode.l10n.t("Cost is missing for {0} request(s); only known amounts are shown.", today.missingCosts))}</p>` : ""}
     <p class="hint">${escapeHtml(vscode.l10n.t("Event costs are reported by the API and may differ from the invoice."))}</p>
     ${rows ? `<h2>${escapeHtml(vscode.l10n.t("Top models today"))}</h2>${rows}` : ""}
-  </section>`;
+  `, open, partial ? "var(--warn)" : "var(--muted)");
 }
 
-function renderBudget(snapshot: UsageSnapshot): string {
+function renderBudget(snapshot: UsageSnapshot, open: boolean): string {
   const config = vscode.workspace.getConfiguration("cursorTokenUsage");
   const progress = budgetProgress(snapshot, config.get("budgetAmount", 0), config.get<BudgetMetric>("budgetMetric", "onDemand"));
-  const title = `<h2>${escapeHtml(vscode.l10n.t("Billing-cycle budget"))}</h2>`;
-  if (!progress) return `<section>${title}<p class="hint">${escapeHtml(vscode.l10n.t("No budget configured. Use Configure Budget to set an amount."))}</p></section>`;
+  const title = vscode.l10n.t("Billing-cycle budget");
+  if (!progress) return collapsibleSection("budget", title, vscode.l10n.t("Not configured"),
+    `<p class="hint">${escapeHtml(vscode.l10n.t("No budget configured. Use Configure Budget to set an amount."))}</p>`, open);
   const label = progress.metric === "included" ? vscode.l10n.t("Included usage") : vscode.l10n.t("On-Demand");
   const content = progress.percent === null
     ? `<p>${escapeHtml(label)} · ${escapeHtml(vscode.l10n.t("Budget: {0}. Selected usage amount is unavailable.", formatCents(progress.budgetCents)))}</p>`
     : meter(label, `${formatCents(progress.usedCents!)} / ${formatCents(progress.budgetCents)}`, progress.percent);
-  return `<section>${title}${content}<p class="hint">${escapeHtml(config.get("alertEnabled", true)
+  const enabled = config.get("alertEnabled", true);
+  const summary = `${label} · ${progress.percent === null ? vscode.l10n.t("Usage unavailable")
+    : `${formatCents(progress.usedCents!)} / ${formatCents(progress.budgetCents)} · ${formatPct(progress.percent, false)}`}${enabled ? "" : ` · ${vscode.l10n.t("Alerts paused")}`}`;
+  return collapsibleSection("budget", title, summary, `${content}<p class="hint">${escapeHtml(enabled
     ? vscode.l10n.t("Alerts at 50%, 80% and 100%; reached levels are remembered across reloads.")
-    : vscode.l10n.t("Usage alerts are disabled; budget notifications are paused."))}</p></section>`;
+    : vscode.l10n.t("Usage alerts are disabled; budget notifications are paused."))}</p>`, open,
+    progress.percent !== null && progress.percent >= 80 ? barColor(progress.percent) : "var(--muted)");
 }
 
-function renderHtml(webview: vscode.Webview, snapshot: UsageSnapshot | null, error: string | null): string {
+function renderHtml(webview: vscode.Webview, snapshot: UsageSnapshot | null, error: string | null, sections: SectionState): string {
   const nonce = String(Date.now());
   const csp = `default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';`;
   const actions = `
@@ -348,8 +376,8 @@ function renderHtml(webview: vscode.Webview, snapshot: UsageSnapshot | null, err
       </header>
       ${ring(heroPct(snapshot), heroHeadline(snapshot), countdown(snapshot.billingCycleEnd), snapshot.isUnlimited)}
       ${actions}
-      ${renderToday(snapshot)}
-      ${renderBudget(snapshot)}
+      ${renderToday(snapshot, sections.today === true)}
+      ${renderBudget(snapshot, sections.budget === true)}
       <section><h2>${escapeHtml(vscode.l10n.t("Usage Trend"))}</h2>
       ${!snapshot.eventsComplete ? `<p class="stale-banner">${escapeHtml(vscode.l10n.t("Usage history is incomplete. Refresh to retry; charts show fetched events only."))}</p>` : ""}
       ${renderTrend(snapshot)}</section>
@@ -394,7 +422,7 @@ html, body {
   font: 13px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif;
   color-scheme: light dark;
 }
-.wrap { max-width: 760px; margin: 0 auto; padding: 20px 18px 36px; }
+.wrap { max-width: 1000px; margin: 0 auto; padding: 20px 18px 36px; }
 header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 header h1 { margin: 0; font-size: 20px; letter-spacing: .01em; }
 .sub { margin: 6px 0 0; color: var(--muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -426,7 +454,25 @@ button {
   border-radius: 8px; padding: 6px 12px; cursor: pointer;
 }
 button:hover { background: var(--vscode-button-secondaryHoverBackground, var(--hover)); }
-section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin: 12px 0; }
+section, .collapsible { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin: 12px 0; }
+.collapsible { padding: 0; }
+.collapsible > summary { display: flex; align-items: baseline; gap: 10px; padding: 12px 16px; cursor: pointer; list-style: none; border-radius: 14px; }
+.collapsible > summary::-webkit-details-marker { display: none; }
+.collapsible > summary::marker { content: ""; }
+.collapsible > summary::before { content: "›"; flex: 0 0 auto; font-size: 18px; line-height: 1; transition: transform .15s; }
+.collapsible[open] > summary::before { transform: rotate(90deg); }
+.collapsible > summary:hover { background: var(--hover); }
+.collapsible > summary:focus-visible { outline: 2px solid var(--vscode-focusBorder, var(--accent)); outline-offset: -2px; }
+.section-title { font-weight: 600; flex-shrink: 0; }
+.section-summary { margin-left: auto; text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.collapsible-body { padding: 4px 16px 14px; }
+@media (max-width: 540px) {
+  .wrap { padding: 14px 10px 24px; }
+  .collapsible > summary { flex-wrap: wrap; gap: 6px 10px; }
+  .section-summary { flex-basis: 100%; margin-left: 18px; text-align: left; }
+  .trend-filters { width: 100%; }
+  #trend-model { max-width: 100%; }
+}
 h2 { margin: 0 0 8px; font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
 .hint { margin: 0 0 10px; color: var(--muted); font-size: 12px; }
 .meter { margin: 0 -8px 8px; padding: 8px; border-radius: 8px; transition: background .15s; }
@@ -452,8 +498,8 @@ h2 { margin: 0 0 8px; font-size: 12px; color: var(--muted); font-weight: 600; le
   background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; color-scheme: inherit;
 }
 .trend-range { color: var(--muted); margin: 0 0 10px; font-size: 12px; }
-.chart-wrap { position: relative; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 8px 4px; min-height: 220px; }
-.chart-wrap svg { width: 100%; height: 220px; display: block; }
+.chart-wrap { position: relative; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 8px 4px; min-height: 300px; }
+.chart-wrap svg { width: 100%; height: 300px; display: block; }
 .chart-tip {
   position: absolute; pointer-events: none; z-index: 5;
   background: var(--vscode-editorHoverWidget-background, var(--card));
@@ -493,6 +539,21 @@ ${body}
 </div>
 <script nonce="${nonce}">
 const vscode = acquireVsCodeApi();
+function readViewState() {
+  return (typeof vscode.getState === "function" && vscode.getState()) || {};
+}
+function saveViewState(patch) {
+  if (typeof vscode.setState === "function") vscode.setState({ ...readViewState(), ...patch });
+}
+for (const section of document.querySelectorAll("details[data-section]")) {
+  const id = section.dataset.section;
+  const savedOpen = readViewState().sections?.[id];
+  if (typeof savedOpen === "boolean") section.open = savedOpen;
+  section.addEventListener("toggle", () => {
+    saveViewState({ sections: { ...readViewState().sections, [id]: section.open } });
+    vscode.postMessage({ command: "section", section: id, open: section.open });
+  });
+}
 window.addEventListener("message", (event) => {
   const banner = document.getElementById("stale-banner");
   if (event.data && event.data.command === "status") {
@@ -518,7 +579,7 @@ for (const btn of document.querySelectorAll("[data-cmd]")) {
   const points = payload.points || [];
   const minDay = payload.minDay || "";
   const maxDay = payload.maxDay || "";
-  const saved = (typeof vscode.getState === "function" && vscode.getState()) || {};
+  const saved = readViewState();
   let metric = saved.metric === "cost" ? "cost" : "token";
   let model = typeof saved.model === "string" ? saved.model : "";
   function isoAdd(iso, n) {
@@ -540,7 +601,7 @@ for (const btn of document.querySelectorAll("[data-cmd]")) {
   if (from > to) { from = last7(); to = maxDay; }
 
   function persist() {
-    if (typeof vscode.setState === "function") vscode.setState({ metric, model, from, to });
+    saveViewState({ metric, model, from, to });
   }
   function eachDay(a, b) {
     const out = [];
@@ -660,14 +721,14 @@ for (const btn of document.querySelectorAll("[data-cmd]")) {
       chartEl.innerHTML = '<p class="chart-empty">' + ((i18n && i18n.dataset.nocost) || "") + "</p>";
       return;
     }
-    const W = 640, H = 220, L = 52, R = 8, T = 12, B = 32;
+    const W = Math.max(280, chartEl.clientWidth - 16 || 640), H = 300, L = 52, R = 8, T = 12, B = 32;
     const plotW = W - L - R, plotH = H - T - B;
     const maxRaw = metric === "cost" ? Math.max(...days.map((d) => d.cents)) : Math.max(...days.map((d) => d.tokens));
     const maxY = niceMax(maxRaw);
     const n = days.length;
     const slot = plotW / n;
-    const barW = Math.min(28, Math.max(6, slot * 0.55));
-    const labelStep = n > 14 ? Math.ceil(n / 8) : 1;
+    const barW = Math.min(28, slot * 0.55);
+    const labelStep = Math.max(1, Math.ceil(n / Math.max(2, Math.floor(plotW / 58))));
     const yTicks = [0, 0.25, 0.5, 0.75, 1].map((t) => maxY * t);
     let grid = "";
     for (const t of yTicks) {
@@ -740,6 +801,15 @@ for (const btn of document.querySelectorAll("[data-cmd]")) {
     });
   });
   render();
+  if (typeof ResizeObserver !== "undefined") {
+    let previousWidth = chartEl.clientWidth;
+    new ResizeObserver(() => {
+      if (chartEl.clientWidth !== previousWidth) {
+        previousWidth = chartEl.clientWidth;
+        render();
+      }
+    }).observe(chartEl);
+  }
 })();
 </script>
 </body>
