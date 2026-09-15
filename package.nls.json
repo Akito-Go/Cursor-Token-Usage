@@ -1,6 +1,6 @@
 {
   "displayName": "Cursor Token Usage",
-  "description": "Live Cursor token billing on the status bar (individual two-pool % or team spend). Details panel with trend; $ only from API cents, no list-price estimate.",
+  "description": "Live Cursor token billing and usage in the status bar. Details panel, alerts, budgets, and diagnostics; costs use API-reported cents only.",
   "viewName": "Token Usage",
   "cmd.showDetails": "Show Token Usage Details",
   "cmd.refresh": "Refresh Token Usage",

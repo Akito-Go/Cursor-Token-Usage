@@ -6,11 +6,9 @@
 
 **A Cursor IDE extension that shows live Cursor token billing on the status bar**
 
-[![Release](https://img.shields.io/github/v/release/Akito-Go/Cursor-Token-Usage)](https://github.com/Akito-Go/Cursor-Token-Usage/releases)
-[![Open VSX](https://img.shields.io/open-vsx/v/akitogo/cursor-token-usage)](https://open-vsx.org/extension/akitogo/cursor-token-usage)
-[![License](https://img.shields.io/github/license/Akito-Go/Cursor-Token-Usage)](LICENSE)
+[Release](https://github.com/Akito-Go/Cursor-Token-Usage/releases) · [Open VSX](https://open-vsx.org/extension/akitogo/cursor-token-usage) · [License: MIT](LICENSE)
 
-[English](#cursor-token-usage) · [中文](#中文) · [Quick Start](#quick-start) · [Features](#features) · [Authentication](#authentication) · [UI](#ui) · [FAQ](#faq)
+[English](#cursor-token-usage) · [中文](#readme-中文) · [Quick Start](#quick-start) · [Features](#features) · [Authentication](#authentication) · [UI](#ui) · [FAQ](#faq)
 
 </div>
 
@@ -79,30 +77,9 @@ To copy the cookie: open [cursor.com](https://cursor.com) → DevTools → Appli
 
 ## UI
 
-```
-Status bar (individual):      $(graph) C 42.3% · O 18.0%
-Status bar (team/enterprise): $(graph) $67.88/$52.00
+<img src="image/show_en.png" alt="Cursor Token Usage usage overview (cropped screenshot)" width="760" />
 
-Details panel
-┌─────────────────────────────────────────────┐
-│ Cursor Token Usage              enterprise  │
-│ Reset in: 12d 4h          Total Tokens 1.2M │
-│                                             │
-│   (  131%  )   Included usage               │
-│                $67.88 / $52.00              │
-│ ████████████████████████████░░░░  over 100% │
-│ Cursor Models   ████████░░░░░░░░     42.3%  │
-│ Other Models    ███░░░░░░░░░░░░░     18.0%  │
-│ On-Demand       $5.74                       │
-│                                             │
-│ By Model                                    │
-│ claude-4.6-opus  ████████████████     801K  │
-│ gpt-5            ██████░░░░░░░░░░     124K  │
-│                                             │
-│ Recent Usage                                │
-│ 08-13 21:04  Claude 4.6 Opus  Included  21K │
-└─────────────────────────────────────────────┘
-```
+Usage overview shown above. Scroll in the actual panel for trends, model totals, and recent events.
 
 Bar colors: green < 40%, yellow < 80%, orange ≥ 80%, red ≥ 100%. Usage ≥ 80% tints the status bar warning; ≥ 100% tints it error.
 
@@ -288,6 +265,8 @@ Issues and pull requests are welcome.
 
 <div align="center">
 
+<a id="readme-中文"></a>
+
 ## 中文
 
 **在状态栏显示 Cursor 现行 token 计费用量的 Cursor IDE 扩展**
@@ -359,30 +338,9 @@ cursor --install-extension akitogo.cursor-token-usage
 
 ### 操作界面
 
-```
-状态栏（个人）：     $(graph) C 42.3% · O 18.0%
-状态栏（团队/企业）： $(graph) $67.88/$52.00
+<img src="image/show_zh.png" alt="Cursor Token Usage 用量概览（局部截图）" width="760" />
 
-详情面板
-┌─────────────────────────────────────────────┐
-│ Cursor Token Usage              enterprise  │
-│ 重置倒计时：12天4小时        Token 合计 1.2M │
-│                                             │
-│   (  131%  )   套餐内用量                    │
-│                $67.88 / $52.00              │
-│ ████████████████████████████░░░░  已超 100% │
-│ Cursor Models   ████████░░░░░░░░     42.3%  │
-│ Other Models    ███░░░░░░░░░░░░░     18.0%  │
-│ On-Demand       $5.74                       │
-│                                             │
-│ 按模型                                      │
-│ claude-4.6-opus  ████████████████    80.1万  │
-│ gpt-5            ██████░░░░░░░░░░    12.4万  │
-│                                             │
-│ 最近消耗                                    │
-│ 08-13 21:04  Claude 4.6 Opus  Included  2.1万│
-└─────────────────────────────────────────────┘
-```
+上图仅展示用量概览；趋势图、按模型统计与最近事件可在实际面板中向下滚动查看。
 
 进度条：绿 < 40%、黄 < 80%、橙 ≥ 80%、红 ≥ 100%。用量 ≥ 80% 状态栏警告底色，≥ 100% 错误底色。
 
