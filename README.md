@@ -6,9 +6,11 @@
 
 **A Cursor IDE extension that shows live Cursor token billing on the status bar**
 
-[Release](https://github.com/Akito-Go/Cursor-Token-Usage/releases) · [Open VSX](https://open-vsx.org/extension/akitogo/cursor-token-usage) · [License: MIT](LICENSE)
+[![Release](https://img.shields.io/github/v/release/Akito-Go/Cursor-Token-Usage)](https://github.com/Akito-Go/Cursor-Token-Usage/releases)
+[![Open VSX](https://img.shields.io/open-vsx/v/akitogo/cursor-token-usage)](https://open-vsx.org/extension/akitogo/cursor-token-usage)
+[![License](https://img.shields.io/github/license/Akito-Go/Cursor-Token-Usage)](LICENSE)
 
-[English](#cursor-token-usage) · [中文](#readme-中文) · [Quick Start](#quick-start) · [Features](#features) · [Authentication](#authentication) · [UI](#ui) · [FAQ](#faq)
+[English](#cursor-token-usage) · [中文](#中文) · [Quick Start](#quick-start) · [Features](#features) · [Authentication](#authentication) · [UI](#ui) · [FAQ](#faq)
 
 </div>
 
@@ -264,8 +266,6 @@ Issues and pull requests are welcome.
 ---
 
 <div align="center">
-
-<a id="readme-中文"></a>
 
 ## 中文
 
