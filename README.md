@@ -49,7 +49,7 @@ cursor --install-extension akitogo.cursor-token-usage
 
 ### From a VSIX
 
-1. For this source version, build `cursor-token-usage-1.1.2.vsix` using [Build from Source](#build-from-source), or obtain the matching version from [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases) if published
+1. For this source version, build `cursor-token-usage-1.1.3.vsix` using [Build from Source](#build-from-source), or obtain the matching version from [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases) if published
 2. Drag it into Cursor, or `Cmd+Shift+P` (Windows: `Ctrl+Shift+P`) → `Extensions: Install from VSIX...`
 3. Run `Developer: Reload Window`
 
@@ -190,7 +190,13 @@ npx @vscode/vsce package --no-dependencies
 
 `npm test` compiles the extension and runs regression tests with simulated API responses; it does not access a real Cursor account. Packaging also compiles automatically and excludes test files.
 
-This version produces `cursor-token-usage-1.1.2.vsix`. Install it, then run **Developer: Reload Window**. Building locally does not publish the package to Open VSX or GitHub Releases.
+This version produces `cursor-token-usage-1.1.3.vsix`. Install it, then run **Developer: Reload Window**. Building locally does not publish the package to Open VSX or GitHub Releases.
+
+## Changelog (1.1.3)
+
+- Show API cost beside tokens in recent usage and when a sidebar row is expanded
+- Label a missing or zero per-event cost, and a zero Today total, as “API did not return a cost”
+- Keep a real `$0.00` for included spend, On-Demand, and the billing-cycle budget
 
 ## Changelog (1.1.2)
 
@@ -310,7 +316,7 @@ cursor --install-extension akitogo.cursor-token-usage
 
 #### 从 VSIX 安装
 
-1. 当前源码版本可按[从源码构建](#从源码构建)生成 `cursor-token-usage-1.1.2.vsix`；若对应版本已发布，也可从 [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases) 获取
+1. 当前源码版本可按[从源码构建](#从源码构建)生成 `cursor-token-usage-1.1.3.vsix`；若对应版本已发布，也可从 [Releases](https://github.com/Akito-Go/Cursor-Token-Usage/releases) 获取
 2. 拖进 Cursor，或 `Cmd+Shift+P`（Windows：`Ctrl+Shift+P`）→ `Extensions: Install from VSIX...`
 3. 执行 `Developer: Reload Window`
 
@@ -451,7 +457,13 @@ npx @vscode/vsce package --no-dependencies
 
 `npm test` 会先编译，再运行基于模拟接口的回归测试，不访问真实 Cursor 账号。打包前也会自动编译，安装包不包含测试文件。
 
-当前版本生成 `cursor-token-usage-1.1.2.vsix`，安装后执行 **Developer: Reload Window**。本地构建不会发布到 Open VSX 或 GitHub Releases。
+当前版本生成 `cursor-token-usage-1.1.3.vsix`，安装后执行 **Developer: Reload Window**。本地构建不会发布到 Open VSX 或 GitHub Releases。
+
+### 更新说明（1.1.3）
+
+- 最近消耗和侧边栏展示单次费用
+- 单次费用缺失或为 0，以及今日消费加总为 0 时，显示「接口未返回费用」
+- 套餐内已用、On-Demand 和周期预算仍显示真实的 `$0.00`
 
 ### 更新说明（1.1.2）
 
