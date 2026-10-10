@@ -197,6 +197,7 @@ This version produces `cursor-token-usage-1.1.3.vsix`. Install it, then run **De
 - Show API cost beside tokens in recent usage and when a sidebar row is expanded
 - Label a missing or zero per-event cost, and a zero Today total, as “API did not return a cost”
 - Keep a real `$0.00` for included spend, On-Demand, and the billing-cycle budget
+- Center the recent-usage table headers and cells
 
 ## Changelog (1.1.2)
 
@@ -464,6 +465,7 @@ npx @vscode/vsce package --no-dependencies
 - 最近消耗和侧边栏展示单次费用
 - 单次费用缺失或为 0，以及今日消费加总为 0 时，显示「接口未返回费用」
 - 套餐内已用、On-Demand 和周期预算仍显示真实的 `$0.00`
+- 最近消耗表的表头和单元格居中
 
 ### 更新说明（1.1.2）
 

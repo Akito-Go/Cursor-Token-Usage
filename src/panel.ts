@@ -530,8 +530,9 @@ h2 { margin: 0 0 8px; font-size: 12px; color: var(--muted); font-weight: 600; le
   color: var(--text); border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
 }
 table { width: 100%; border-collapse: collapse; }
-th, td { text-align: left; padding: 8px 4px; border-bottom: 1px solid var(--line); }
+th, td { text-align: center; padding: 8px 4px; border-bottom: 1px solid var(--line); }
 th { color: var(--muted); font-weight: 500; }
+table td.num { text-align: center; }
 td.missing { color: var(--muted); }
 .badge { font-size: 11px; border-radius: 99px; padding: 1px 8px; }
 .badge.inc { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
