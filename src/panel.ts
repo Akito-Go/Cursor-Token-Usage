@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import { budgetProgress, BudgetMetric } from "./budget";
 import { summarizeToday } from "./today";
 import { UsageSnapshot } from "./models";
-import { formatCents, formatEventTime, formatPct, formatTokens, isZh, membershipLabel, shortenModel } from "./treeView";
+import { formatCents, formatEventCost, formatEventTime, formatPct, formatTokens, isZh, membershipLabel, shortenModel } from "./treeView";
 
 type SectionState = Partial<Record<"today" | "budget", boolean>>;
 const SECTION_STATE_KEY = "cursorTokenUsage.panelSections";
@@ -253,7 +253,11 @@ function collapsibleSection(id: "today" | "budget", title: string, summary: stri
 
 function renderToday(snapshot: UsageSnapshot, open: boolean): string {
   const today = summarizeToday(snapshot);
-  const amount = today.reportedCents === null ? vscode.l10n.t("Cost unavailable") : formatCents(today.reportedCents);
+  const amount = today.reportedCents === null
+    ? vscode.l10n.t("Cost unavailable")
+    : today.reportedCents === 0
+      ? vscode.l10n.t("API did not return a cost")
+      : formatCents(today.reportedCents);
   const scope = today.historyComplete ? vscode.l10n.t("Loaded history for today") : vscode.l10n.t("Partial history: totals include available events only");
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const rows = today.models.slice(0, 3).map(row => `<div class="meter-head"><span>${escapeHtml(shortenModel(row.model))}</span><strong>${escapeHtml(formatTokens(row.tokens))}</strong></div>`).join("");
@@ -355,11 +359,14 @@ function renderHtml(webview: vscode.Webview, snapshot: UsageSnapshot | null, err
     const events = visibleEvents.map((e) => {
       const onDemand = e.kind.includes("USAGE_BASED");
       const badge = onDemand ? vscode.l10n.t("On-Demand") : vscode.l10n.t("Included");
+      const costMissing = e.totalCents === null || e.totalCents === 0;
+      const cost = formatEventCost(e.totalCents);
       return `<tr class="clickable" data-filter-model="${escapeHtml(e.model)}">
         <td>${escapeHtml(formatEventTime(e.timestamp))}</td>
         <td>${escapeHtml(shortenModel(e.model))}</td>
         <td><span class="badge ${onDemand ? "od" : "inc"}">${badge}</span></td>
         <td class="num">${escapeHtml(formatTokens(e.totalTokens))}</td>
+        <td class="num${costMissing ? " missing" : ""}">${escapeHtml(cost)}</td>
       </tr>`;
     }).join("");
 
@@ -386,7 +393,7 @@ function renderHtml(webview: vscode.Webview, snapshot: UsageSnapshot | null, err
         <p class="hint">${escapeHtml(vscode.l10n.t("Click a model row to filter the trend"))}</p>
         ${models || `<p class="empty">${escapeHtml(vscode.l10n.t("No data"))}</p>`}</section>
       <section><h2>${escapeHtml(vscode.l10n.t("Recent Usage ({0} entries)", visibleEvents.length))}</h2>
-        <table><thead><tr><th>${escapeHtml(vscode.l10n.t("Time"))}</th><th>${escapeHtml(vscode.l10n.t("Model"))}</th><th>${escapeHtml(vscode.l10n.t("Kind"))}</th><th>${escapeHtml(vscode.l10n.t("Tokens"))}</th></tr></thead><tbody>${events}</tbody></table>
+        <table><thead><tr><th>${escapeHtml(vscode.l10n.t("Time"))}</th><th>${escapeHtml(vscode.l10n.t("Model"))}</th><th>${escapeHtml(vscode.l10n.t("Kind"))}</th><th>${escapeHtml(vscode.l10n.t("Tokens"))}</th><th>${escapeHtml(vscode.l10n.t("Cost"))}</th></tr></thead><tbody>${events}</tbody></table>
       </section>`;
   }
 
@@ -525,6 +532,7 @@ h2 { margin: 0 0 8px; font-size: 12px; color: var(--muted); font-weight: 600; le
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 8px 4px; border-bottom: 1px solid var(--line); }
 th { color: var(--muted); font-weight: 500; }
+td.missing { color: var(--muted); }
 .badge { font-size: 11px; border-radius: 99px; padding: 1px 8px; }
 .badge.inc { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
 .badge.od { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }

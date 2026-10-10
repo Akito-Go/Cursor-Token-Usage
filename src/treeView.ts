@@ -134,7 +134,13 @@ export class UsageTreeProvider implements vscode.TreeDataProvider<UsageTreeItem>
               leaf(vscode.l10n.t("Cache read: {0}", formatTokens(e.cacheReadTokens)), "archive"),
             ];
           }
-          entry.children = [tokensItem];
+          const costItem = new UsageTreeItem(
+            `${vscode.l10n.t("Cost")}: ${formatEventCost(e.totalCents)}`,
+            vscode.TreeItemCollapsibleState.None,
+          );
+          costItem.iconPath = new vscode.ThemeIcon("credit-card");
+          costItem.contextValue = "costItem";
+          entry.children = [tokensItem, costItem];
           return entry;
         });
         items.push(recent);
@@ -222,6 +228,12 @@ export function membershipLabel(type: string): string {
 
 export function formatCents(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
+}
+
+/** Dashboard events often report an explicit 0 when per-request cost was withheld. */
+export function formatEventCost(cents: number | null): string {
+  if (cents === null || cents === 0) return vscode.l10n.t("API did not return a cost");
+  return formatCents(cents);
 }
 
 export function formatTokens(tokens: number): string {

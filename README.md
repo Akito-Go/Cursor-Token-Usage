@@ -20,7 +20,7 @@ Cursor now bills by tokens in two pools (not the old “fast-premium requests + 
 
 ## Features
 
-| **Status bar** Individual: `C xx% · O xx%`. Team / Enterprise: included used vs limit (API cents, not a local estimate) | **Details panel** Click the status bar for a usage ring, colored bars, per-model tokens, recent events, and a trend chart |
+| **Status bar** Individual: `C xx% · O xx%`. Team / Enterprise: included used vs limit (API cents, not a local estimate) | **Details panel** Click the status bar for a usage ring, colored bars, per-model tokens, recent events with cost, and a trend chart |
 | --- | --- |
 | **Account-aware** Type comes from the API (`individual` / `team` / `enterprise`), not guessed from the token | **Usage alerts** Notify when the delta between two polls exceeds a threshold; metrics and thresholds are configurable |
 
@@ -32,9 +32,9 @@ Cursor now bills by tokens in two pools (not the old “fast-premium requests + 
 - English / Chinese UI, follows the editor language
 - Universal VSIX for macOS / Windows / Linux; after first-run consent, reads the local Cursor session (`state.vscdb`)
 - UI extension (`extensionKind: ui`): on SSH Remote, WSL, or Dev Containers it still reads the **local** login
-- Shows `$` only when the API returns cents; does not estimate invoices from list prices
+- Shows `$` for a positive per-event cost and for summary amounts, including a real `$0.00`; does not estimate invoices from list prices
 - Trend chart defaults to the last 7 days; From / To can span months within the billing cycle
-- Today’s usage shows API-reported cost, tokens, requests and top models, with missing-data labels
+- Today’s usage shows API-reported cost, tokens, requests and top models; a zero event-cost total is labeled “API did not return a cost”
 - Billing-cycle budgets notify at 50%, 80% and 100%; connection diagnostics show authentication source, endpoint results and polling state
 
 ## Quick Start
@@ -83,6 +83,8 @@ To copy the cookie: open [cursor.com](https://cursor.com) → DevTools → Appli
 
 Usage overview shown above. Scroll in the actual panel for trends, model totals, and recent events.
 
+Recent usage is a table of the latest rows (`displayCount`, default 5): time, model, kind, tokens, and cost. A positive per-request amount from the events API is shown in dollars. A missing amount or an explicit zero is labeled “API did not return a cost”. Expanding the same row in the sidebar shows that cost. Included spend, On-Demand, and the billing-cycle budget still show `$0.00` when the summary API reports zero.
+
 Bar colors: green < 40%, yellow < 80%, orange ≥ 80%, red ≥ 100%. Usage ≥ 80% tints the status bar warning; ≥ 100% tints it error.
 
 Panel buttons: Refresh, Set Session Token, status bar side, Configure Alerts, Configure Budget, Connection Diagnostics.
@@ -91,7 +93,7 @@ Panel buttons: Refresh, Set Session Token, status bar side, Configure Alerts, Co
 
 The panel uses up to 1,000 px of available width. The trend chart is 300 px tall and redraws to fit the panel; date-label density adapts to its width. Collapsing a section or resizing the panel preserves the selected dates, model and Token/Cost tab.
 
-Trend chart: Token (stacked input / output / cache + line) or Cost (bars + line). Date inputs are bounded by the billing cycle and default to the last 7 days. The Cost tab only draws when the API returns cents. Background polls update the status bar and panel status banners while preserving the chart and date selection. Fetch errors appear immediately in an open panel; after recovery, a banner asks you to Refresh for current details.
+Trend chart: Token (stacked input / output / cache + line) or Cost (bars + line). Date inputs are bounded by the billing cycle and default to the last 7 days. The Cost tab only draws when at least one event cost is greater than zero. Background polls update the status bar and panel status banners while preserving the chart and date selection. Fetch errors appear immediately in an open panel; after recovery, a banner asks you to Refresh for current details.
 
 ## Configuration
 
@@ -144,7 +146,7 @@ Changing the account or billing cycle resets the alert baseline. The first succe
 
 Budget alerts use absolute billing-cycle usage, so gradual consumption can reach a threshold even when no single poll triggers a usage-change alert. Each 50%, 80% and 100% milestone is remembered across reloads. If one poll reaches several new levels, only the highest is notified and lower levels are considered reached. Configuring a budget below current usage can notify immediately. A new account, billing cycle, budget amount or cost basis starts a separate milestone record. Up to 100 recent combinations are retained locally as hashed scope keys and reached levels; session tokens are not stored in this record. Missing selected amounts or invalid cycle dates suppress budget alerts.
 
-**Today:** the details panel shows cost, tokens, request count and the top three models by tokens. “Today” uses the computer’s local timezone, limited to the current billing cycle and the last fetched snapshot. The status-bar tooltip includes today’s tokens and requests. Costs sum only amounts returned by the events API; a missing amount stays unavailable, while an explicit zero remains zero. Partially priced or incomplete history is labeled, and event costs may differ from the invoice. Refresh the details panel to fetch more history and update these cards.
+**Today:** the details panel shows cost, tokens, request count and the top three models by tokens. “Today” uses the computer’s local timezone, limited to the current billing cycle and the last fetched snapshot. The status-bar tooltip includes today’s tokens and requests. The card sums positive per-event cents. A today total of zero is labeled “API did not return a cost”. If no event included a cost field, it stays “Cost unavailable”. Partially priced or incomplete history is labeled, and event costs may differ from the invoice. Refresh the details panel to fetch more history and update these cards.
 
 **Diagnostics:** use **Connection Diagnostics** in the panel or **Show Connection Diagnostics** in the Command Palette. The output report includes the last-used authentication source (local session / manual token / unavailable), last attempt and successful fetch, summary/events/model endpoint results, consecutive failures, current polling interval and cached-history completeness. It displays no token, cookie or raw account ID and sends no report anywhere. The report is a snapshot: refresh usage and reopen diagnostics for new results. A timed-out poll can leave endpoint results unknown.
 
@@ -152,7 +154,7 @@ Budget alerts use absolute billing-cycle usage, so gradual consumption can reach
 
 **Why not estimate dollars?**
 
-Self-serve usage events often return `$0` (`chargedCents: 0`) even when tokens were used. Token × public list price will not match the invoice: included quota, Team / Enterprise discounts, and Cursor Token Rate are applied server-side. `$` is shown only when the API returns cents. Token counts are always tokens. The **Cost** tab stays empty in that case; use **Token**.
+Self-serve usage events often return `$0` (`chargedCents: 0`) even when tokens were used. Token × public list price will not match the invoice: included quota, Team / Enterprise discounts, and Cursor Token Rate are applied server-side. `$` is shown only when the API returns a positive per-event amount, or a summary amount from the billing API. A missing or zero event cost is labeled “API did not return a cost” in Recent usage and on a zero Today total. Token counts are always tokens. The **Cost** tab stays empty in that case; use **Token**. Included spend, On-Demand, and budget amounts still show a real `$0.00`.
 
 **Status bar stuck on Set Token?**
 
@@ -279,7 +281,7 @@ Cursor 已改为按 token、双池计费（不再是旧的「fast-premium 请求
 
 ### 核心特性
 
-| **状态栏常驻** 个人：`C xx% · O xx%`。团队 / 企业：套餐内已用 vs 上限（接口美分，非本地估算） | **详情面板** 点击状态栏：环形用量、彩色进度条、按模型 Token、最近事件、趋势图 |
+| **状态栏常驻** 个人：`C xx% · O xx%`。团队 / 企业：套餐内已用 vs 上限（接口美分，非本地估算） | **详情面板** 点击状态栏：环形用量、彩色进度条、按模型 Token、带费用的最近消耗、趋势图 |
 | --- | --- |
 | **账号自适应** 类型来自接口（`individual` / `team` / `enterprise`），不从 token 猜测 | **用量提醒** 两次轮询之间的变化超过阈值时弹窗，监控项与阈值可配 |
 
@@ -291,9 +293,9 @@ Cursor 已改为按 token、双池计费（不再是旧的「fast-premium 请求
 - 中 / 英界面，跟随编辑器语言
 - macOS / Windows / Linux 通用 VSIX，首次确认后读本机 Cursor 会话（`state.vscdb`）
 - UI 扩展（`extensionKind: ui`）：SSH Remote、WSL、Dev Containers 下仍读**本机**登录
-- 只在接口返回美分时显示 `$`，不用官网单价估算账单
+- 正数的单次费用，以及汇总金额（含真实的 `$0.00`），才显示 `$`；不用官网单价估算账单
 - 趋势图默认近 7 天；From / To 可在账单周期内跨月
-- 今日消费展示接口费用、Token、请求数和主要模型，并标注缺失数据
+- 今日消费展示接口费用、Token、请求数和主要模型；事件费用加总为 0 时标注「接口未返回费用」
 - 周期预算在 50%、80%、100% 提醒；连接诊断展示认证来源、接口结果和轮询状态
 
 ### 快速开始
@@ -342,6 +344,8 @@ cursor --install-extension akitogo.cursor-token-usage
 
 上图仅展示用量概览；趋势图、按模型统计与最近事件可在实际面板中向下滚动查看。
 
+最近消耗表展示最近若干条（`displayCount`，默认 5 条）：时间、模型、类型、用量、费用。事件接口返回大于 0 的美分时显示美元。金额缺失或明确为 0 时，显示「接口未返回费用」。侧边栏展开同一条记录也能看到这笔费用。套餐内已用、On-Demand 和周期预算来自汇总接口，汇总为 0 时仍显示 `$0.00`。
+
 进度条：绿 < 40%、黄 < 80%、橙 ≥ 80%、红 ≥ 100%。用量 ≥ 80% 状态栏警告底色，≥ 100% 错误底色。
 
 面板按钮：刷新、设置 Session Token、状态栏位置、配置提醒、配置预算、连接诊断。
@@ -350,7 +354,7 @@ cursor --install-extension akitogo.cursor-token-usage
 
 面板最大可用宽度为 1,000 px，趋势图高度为 300 px，会随面板宽度重绘并调整日期标签密度。折叠区块或调整面板大小时，会保留日期、模型和 Token／费用选项。
 
-趋势图：Token（输入 / 输出 / 缓存堆叠 + 折线）或费用（柱 + 折线）。日期框范围是账单周期，默认近 7 天。费用 Tab 仅在接口返回美分时作图。后台轮询更新状态栏和面板提示，保留图表及日期选择。面板打开时会即时显示请求失败；恢复后提示点刷新查看最新详情。
+趋势图：Token（输入 / 输出 / 缓存堆叠 + 折线）或费用（柱 + 折线）。日期框范围是账单周期，默认近 7 天。费用 Tab 仅在至少有一条事件费用大于 0 时作图。后台轮询更新状态栏和面板提示，保留图表及日期选择。面板打开时会即时显示请求失败；恢复后提示点刷新查看最新详情。
 
 ### 配置
 
@@ -403,7 +407,7 @@ cursor --install-extension akitogo.cursor-token-usage
 
 预算按账单周期的累计用量检查，即使每次消费都很小，累计达到档位也会提醒。50%、80%、100% 的提醒记录在重载后保留；一次轮询跨过多个档位时，只提醒最高档，并将较低档标记为已达到。配置低于当前用量的预算时，可能立即提醒。账号、账单周期、预算金额或口径变化后使用独立记录。本机最多保留最近 100 组配置的哈希标识和已达到档位，不在该记录中保存会话 Token。所选金额缺失或周期日期无效时不发预算提醒。
 
-**今日消费：** 面板展示今日费用、Token、请求数和按 Token 排序的前三个模型。按本机时区确定“今天”，范围限于当前账单周期及最近获取的快照；状态栏悬停也可查看今日 Token 和请求数。费用只累加事件接口实际返回的金额，缺失金额显示暂无数据，明确返回的零仍显示零。部分请求缺价或历史不完整时会标注，事件费用可能与最终账单不同。刷新详情可补拉历史并更新卡片。
+**今日消费：** 面板展示今日费用、Token、请求数和按 Token 排序的前三个模型。按本机时区确定“今天”，范围限于当前账单周期及最近获取的快照；状态栏悬停也可查看今日 Token 和请求数。卡片只累加事件接口返回的正数美分。当天加总为 0 时显示「接口未返回费用」。没有任何费用字段时仍显示「暂无费用数据」。部分请求缺价或历史不完整时会标注，事件费用可能与最终账单不同。刷新详情可补拉历史并更新卡片。
 
 **连接诊断：** 点击面板里的 **连接诊断**，或在命令面板执行 **查看连接诊断**。输出报告包括最近使用的认证来源（本机会话／手动 Token／不可用）、最近尝试和成功获取时间、汇总／事件／模型接口结果、连续失败次数、当前轮询间隔及缓存历史完整性。不展示 Token、Cookie 或原始账号 ID，也不会发送报告。诊断是当前状态的快照；刷新用量后重新打开可查看更新结果，轮询超时时部分接口状态可能未知。
 
@@ -411,7 +415,7 @@ cursor --install-extension akitogo.cursor-token-usage
 
 **为什么不估算美元？**
 
-自助套餐的用量事件里，美元经常是 `$0`（`chargedCents: 0`），即使已经消耗 token。用 token × 官网单价对不上账单：套餐额度、团队 / 企业折扣、Cursor Token Rate 都在服务端结算。只有接口自己返回美分时才显示 `$`。Token 始终按 token 显示。这时 **费用** Tab 会空，请看 **Token**。
+自助套餐的用量事件里，美元经常是 `$0`（`chargedCents: 0`），即使已经消耗 token。用 token × 官网单价对不上账单：套餐额度、团队 / 企业折扣、Cursor Token Rate 都在服务端结算。只有事件接口返回大于 0 的美分，或汇总接口返回金额时，才显示 `$`。单次费用缺失或为 0 时，最近消耗和加总为 0 的今日消费显示「接口未返回费用」。Token 始终按 token 显示。这时 **费用** Tab 会空，请看 **Token**。套餐内已用、On-Demand 和预算仍会显示真实的 `$0.00`。
 
 **状态栏一直是 Set Token？**
 

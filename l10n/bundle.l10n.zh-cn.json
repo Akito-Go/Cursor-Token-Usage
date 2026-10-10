@@ -124,6 +124,7 @@
   "Reported cost": "接口报告费用",
   "Requests": "请求数",
   "Cost unavailable": "暂无费用数据",
+  "API did not return a cost": "接口未返回费用",
   "Loaded history for today": "今日已加载历史",
   "Partial history: totals include available events only": "历史不完整：仅统计已有记录",
   "Current billing cycle; data as of {0}": "当前账单周期内；数据截至 {0}",

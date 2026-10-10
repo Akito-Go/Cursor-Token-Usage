@@ -233,6 +233,7 @@ function panelFixture({ snap = snapshot(), config = {}, storage } = {}) {
   const vscode = vscodeMock();
   vscode.workspace.getConfiguration = () => ({ get: (key, fallback) => config[key] ?? fallback });
   const helpers = { formatCents: String, formatEventTime: String, formatPct: String,
+    formatEventCost: (cents) => (cents === null || cents === 0) ? "API did not return a cost" : String(cents),
     formatTokens: String, isZh: () => false, membershipLabel: String, shortenModel: String };
   const { UsagePanel } = load('panel', { './treeView': helpers }, vscode);
   const posted = [];
@@ -442,6 +443,38 @@ test('diagnostic states distinguish successful, partial, failed and skipped endp
   assert.equal(tracker.diagnostics.aggregations, 'ok');
   assert.equal(tracker.diagnostics.failures, 0);
   assert.equal(tracker.diagnostics.running, false);
+});
+test('recent usage table shows API cost next to tokens and labels a zero as not returned', () => {
+  const { view } = panelFixture({ snap: snapshot({ eventsComplete: true, events: [
+    { ...event(1_700_000_000_000, 'grok'), totalCents: 168, totalTokens: 168000 },
+    { ...event(1_700_000_100_000, 'composer'), totalCents: null, totalTokens: 1000 },
+    { ...event(1_700_000_200_000, 'auto'), totalCents: 0, totalTokens: 500 },
+  ] }) });
+  const html = view.webview.html;
+  assert.match(html, /<th>Time<\/th><th>Model<\/th><th>Kind<\/th><th>Tokens<\/th><th>Cost<\/th>/);
+  assert.match(html, /<td class="num">168000<\/td>\s*<td class="num">168<\/td>/);
+  assert.equal(html.split('class="num missing">API did not return a cost').length - 1, 2);
+});
+test('today labels a zero event-cost total as not returned and keeps a positive sum', () => {
+  const now = new Date();
+  const cycle = {
+    billingCycleStart: new Date(now.getFullYear(), now.getMonth(), 1).toISOString(),
+    billingCycleEnd: new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString(),
+  };
+  const zero = panelFixture({ snap: snapshot({ timestamp: now, eventsComplete: true, ...cycle,
+    events: [{ ...event(now.getTime()), totalCents: 0 }] }) });
+  assert.match(zero.view.webview.html, /Reported cost<strong>API did not return a cost<\/strong>/);
+  const paid = panelFixture({ snap: snapshot({ timestamp: now, eventsComplete: true, ...cycle,
+    events: [{ ...event(now.getTime()), totalCents: 250 }] }) });
+  assert.match(paid.view.webview.html, /Reported cost<strong>250<\/strong>/);
+});
+test('event cost treats an API zero as withheld and formats a positive amount', () => {
+  const vscode = vscodeMock();
+  vscode.TreeItem = class {};
+  const { formatEventCost } = load('treeView', {}, vscode);
+  assert.equal(formatEventCost(null), 'API did not return a cost');
+  assert.equal(formatEventCost(0), 'API did not return a cost');
+  assert.equal(formatEventCost(168), '$1.68');
 });
 test('panel exposes today, budget and diagnostics even when budget is disabled', () => {
   const { view } = panelFixture();
