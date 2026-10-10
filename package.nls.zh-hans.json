@@ -1,6 +1,6 @@
 {
   "displayName": "Cursor Token Usage",
-  "description": "在状态栏查看 Cursor 实时 Token 计费与用量。提供详情面板、提醒、预算和诊断；费用仅使用接口返回的美分。",
+  "description": "在状态栏查看 Cursor 实时 Token 计费与用量。提供详情面板、提醒、预算和诊断；最近消耗在用量旁显示接口费用，费用仅使用接口返回的美分。",
   "viewName": "Token Usage",
   "cmd.showDetails": "查看用量明细",
   "cmd.refresh": "刷新用量",
