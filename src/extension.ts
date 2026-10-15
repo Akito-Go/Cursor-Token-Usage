@@ -507,7 +507,11 @@ async function checkBudget(): Promise<void> {
   if (!snapshot || tracker.lastError || !config.get("alertEnabled", true)) return;
   try {
     for (const notice of await budgetMonitor.checkPools(snapshot)) {
-      const label = notice.pool === "cursorModels" ? vscode.l10n.t("Cursor Models") : vscode.l10n.t("Other Models");
+      const label = notice.pool === "cursorModels"
+        ? vscode.l10n.t("Cursor Models")
+        : notice.pool === "otherModels"
+          ? vscode.l10n.t("Other Models")
+          : vscode.l10n.t("Included usage");
       void vscode.window.showWarningMessage(vscode.l10n.t("Pool alert: {0} reached {1}% ({2})",
         label, notice.milestone, formatPct(notice.percent, false)));
     }

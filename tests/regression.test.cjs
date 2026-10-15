@@ -398,6 +398,18 @@ test('pool milestones alert each included pool once and ignore a missing percent
   assert.equal((await monitor.checkPools(snapshot({ cursorModelsPercent: null, otherModelsPercent: 49 }))).length, 0);
   const dollar = await monitor.check(snapshot({ cursorModelsPercent: 100, onDemandUsedCents: 5000 }), 100, 'onDemand');
   assert.equal(dollar.milestone, 50);
+  const enterprise = await monitor.checkPools(snapshot({
+    displayMode: 'overall', overallUsedCents: 8000, overallLimitCents: 10000,
+  }));
+  assert.equal(enterprise.length, 1);
+  assert.equal(enterprise[0].pool, 'included');
+  assert.equal(enterprise[0].milestone, 80);
+  const mixed = await monitor.checkPools(snapshot({
+    displayMode: 'overall', overallUsedCents: 9600, overallLimitCents: 10000,
+    cursorModelsPercent: 90, otherModelsPercent: 10,
+  }));
+  assert.equal(mixed.length, 1);
+  assert.equal(mixed[0].pool, 'cursorModels');
 });
 test('today respects local midnight, second timestamps, billing cycle and top-model ordering', () => {
   const { summarizeToday } = load('today');
@@ -636,6 +648,14 @@ test('collapsed cards retain partial-data warnings and budget progress without h
   assert.match(pools.view.webview.html, /Other Models 95\.9/);
   assert.match(pools.view.webview.html, /Cursor Models and Other Models alert at 50%/);
   assert.doesNotMatch(pools.view.webview.html, /Selected usage amount is unavailable/);
+  const enterprise = panelFixture({
+    snap: snapshot({ displayMode: 'overall', overallUsedCents: 9600, overallLimitCents: 10000 }),
+  });
+  const enterpriseHtml = enterprise.view.webview.html;
+  assert.match(enterpriseHtml, /ring-face/);
+  assert.match(enterpriseHtml, /\(>_<\)/);
+  assert.doesNotMatch(enterpriseHtml, /class="ring-fg"[^>]*r="40"/);
+  assert.match(enterpriseHtml, /Included usage alerts at 50%/);
 });
 test('independent section preferences survive refresh and new panels; invalid messages do not persist', async () => {
   const storage = memoryState();

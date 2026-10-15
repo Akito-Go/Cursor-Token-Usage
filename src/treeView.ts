@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { includedSpendPercent } from "./budget";
 import { UsageTracker } from "./tracker";
 
 export class UsageTreeItem extends vscode.TreeItem {
@@ -33,11 +34,18 @@ export class UsageTreeProvider implements vscode.TreeDataProvider<UsageTreeItem>
       );
       summary.contextValue = "summarySection";
       const children: UsageTreeItem[] = [];
-      if (!hidden.includes("cursorModels")) {
-        children.push(percentItem(vscode.l10n.t("Cursor Models"), "cursorModels", snapshot.cursorModelsPercent, snapshot.isUnlimited));
-      }
-      if (!hidden.includes("otherModels")) {
-        children.push(percentItem(vscode.l10n.t("Other Models"), "otherModels", snapshot.otherModelsPercent, snapshot.isUnlimited));
+      const poolPercentsMissing = snapshot.displayMode === "overall"
+        && snapshot.cursorModelsPercent === null
+        && snapshot.otherModelsPercent === null;
+      if (poolPercentsMissing && (!hidden.includes("cursorModels") || !hidden.includes("otherModels"))) {
+        children.push(percentItem(vscode.l10n.t("Included usage"), "included", includedSpendPercent(snapshot), snapshot.isUnlimited));
+      } else {
+        if (!hidden.includes("cursorModels")) {
+          children.push(percentItem(vscode.l10n.t("Cursor Models"), "cursorModels", snapshot.cursorModelsPercent, snapshot.isUnlimited));
+        }
+        if (!hidden.includes("otherModels")) {
+          children.push(percentItem(vscode.l10n.t("Other Models"), "otherModels", snapshot.otherModelsPercent, snapshot.isUnlimited));
+        }
       }
       if (!hidden.includes("onDemandUsage") && snapshot.onDemandEnabled && snapshot.onDemandUsedCents !== null) {
         const od = new UsageTreeItem(vscode.l10n.t("On-Demand"), vscode.TreeItemCollapsibleState.None);

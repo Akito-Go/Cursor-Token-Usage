@@ -3,7 +3,7 @@ import type { Memento } from "vscode";
 import { UsageSnapshot } from "./models";
 
 export type BudgetMetric = "onDemand" | "included";
-export type PoolMilestoneId = "cursorModels" | "otherModels";
+export type PoolMilestoneId = "cursorModels" | "otherModels" | "included";
 export interface BudgetProgress {
   budgetCents: number;
   usedCents: number | null;
@@ -41,6 +41,21 @@ export function poolPercents(snapshot: UsageSnapshot): Array<{ pool: PoolMilesto
     if (typeof value === "number" && Number.isFinite(value) && value >= 0) rows.push({ pool, percent: value });
   }
   return rows;
+}
+
+/** Team / Enterprise included spend, used when the summary has dollars instead of the two pool percents. */
+export function includedSpendPercent(snapshot: UsageSnapshot): number | null {
+  if (snapshot.isUnlimited || snapshot.displayMode !== "overall") return null;
+  if (snapshot.overallUsedCents === null || snapshot.overallLimitCents === null || snapshot.overallLimitCents <= 0) return null;
+  if (!Number.isFinite(snapshot.overallUsedCents) || snapshot.overallUsedCents < 0) return null;
+  return snapshot.overallUsedCents / snapshot.overallLimitCents * 100;
+}
+
+export function allowancePercents(snapshot: UsageSnapshot): Array<{ pool: PoolMilestoneId; percent: number }> {
+  const pools = poolPercents(snapshot);
+  if (pools.length) return pools;
+  const included = includedSpendPercent(snapshot);
+  return included === null ? [] : [{ pool: "included", percent: included }];
 }
 
 function milestoneFor(percent: number): number | undefined {
@@ -99,7 +114,7 @@ export class BudgetMonitor {
     const saved = this.storage.get<Record<string, number>>(STATE_KEY, {});
     const updates: Record<string, number> = {};
     const notices: PoolMilestone[] = [];
-    for (const row of poolPercents(snapshot)) {
+    for (const row of allowancePercents(snapshot)) {
       const milestone = milestoneFor(row.percent);
       if (!milestone) continue;
       const key = scopeKey([

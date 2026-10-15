@@ -1,7 +1,7 @@
 import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
-import { budgetProgress, BudgetMetric } from "./budget";
+import { budgetProgress, BudgetMetric, includedSpendPercent } from "./budget";
 import { buildEventsCsv } from "./csv";
 import { summarizeModels } from "./modelBreakdown";
 import { summarizeToday } from "./today";
@@ -169,6 +169,11 @@ function ringArc(radius: number, pct: number, color: string, unlimited: boolean)
     stroke-dasharray="${length.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}"></circle>`;
 }
 
+function faceCenter(pct: number, unlimited: boolean): string {
+  const color = unlimited ? "var(--ok)" : barColor(pct);
+  return `<div class="ring-center"><span class="ring-face" style="color:${color}" tabindex="0">${usageFace(pct, unlimited)}<span class="face-tip" role="tooltip">${escapeHtml(usageFaceLabel(pct, unlimited))}</span></span></div>`;
+}
+
 function ring(snapshot: UsageSnapshot, headline: string, sub: string): string {
   const unlimited = snapshot.isUnlimited;
   const overall = snapshot.displayMode === "overall"
@@ -183,7 +188,7 @@ function ring(snapshot: UsageSnapshot, headline: string, sub: string): string {
         <circle class="ring-bg" cx="64" cy="64" r="54"></circle>
         ${ringArc(54, pct, color, unlimited)}
       </svg>
-      <div class="ring-center" style="color:${color}">${escapeHtml(formatPct(pct, unlimited))}</div>`;
+      ${faceCenter(pct, unlimited)}`;
   } else {
     const cursorPct = snapshot.cursorModelsPercent ?? 0;
     const otherPct = snapshot.otherModelsPercent ?? 0;
@@ -195,7 +200,7 @@ function ring(snapshot: UsageSnapshot, headline: string, sub: string): string {
         ${ringArc(54, otherPct, otherColor, unlimited)}
         ${ringArc(40, cursorPct, cursorColor, unlimited)}
       </svg>
-      <div class="ring-center"><span class="ring-face" style="color:${unlimited ? "var(--ok)" : barColor(Math.max(cursorPct, otherPct))}" tabindex="0">${usageFace(Math.max(cursorPct, otherPct), unlimited)}<span class="face-tip" role="tooltip">${escapeHtml(usageFaceLabel(Math.max(cursorPct, otherPct), unlimited))}</span></span></div>`;
+      ${faceCenter(Math.max(cursorPct, otherPct), unlimited)}`;
   }
   return `<div class="hero">
     <div class="ring-wrap">
@@ -409,16 +414,22 @@ function renderBudget(snapshot: UsageSnapshot, open: boolean): string {
   const title = vscode.l10n.t("Allowance alerts");
   const cursorPct = finitePoolPct(snapshot.cursorModelsPercent, snapshot.isUnlimited);
   const otherPct = finitePoolPct(snapshot.otherModelsPercent, snapshot.isUnlimited);
+  const includedPct = cursorPct === null && otherPct === null
+    ? finitePoolPct(includedSpendPercent(snapshot), false)
+    : null;
   const pools = [
     cursorPct === null ? "" : meter(vscode.l10n.t("Cursor Models"), formatPct(cursorPct, false), cursorPct),
     otherPct === null ? "" : meter(vscode.l10n.t("Other Models"), formatPct(otherPct, false), otherPct),
+    includedPct === null ? "" : meter(vscode.l10n.t("Included usage"), formatPct(includedPct, false), includedPct),
   ].filter(Boolean);
   const enabled = config.get("alertEnabled", true);
   const paused = enabled ? "" : ` · ${vscode.l10n.t("Alerts paused")}`;
   const hint = enabled
-    ? vscode.l10n.t(pools.length
+    ? vscode.l10n.t(cursorPct !== null || otherPct !== null
       ? "Cursor Models and Other Models alert at 50%, 80% and 100%. Reached levels are remembered across reloads."
-      : "Alerts at 50%, 80% and 100%; reached levels are remembered across reloads.")
+      : includedPct !== null
+        ? "Included usage alerts at 50%, 80% and 100%. Reached levels are remembered across reloads."
+        : "Alerts at 50%, 80% and 100%; reached levels are remembered across reloads.")
     : vscode.l10n.t("Usage alerts are disabled; amount alerts are paused.");
   if (!pools.length && !progress) return collapsibleSection("budget", title, vscode.l10n.t("Not configured"),
     `<p class="hint">${escapeHtml(vscode.l10n.t("No dollar alert configured. Use Configure Amount Alert to set an amount."))}</p>`, open);
@@ -434,11 +445,12 @@ function renderBudget(snapshot: UsageSnapshot, open: boolean): string {
   const summary = [
     cursorPct === null ? "" : `${vscode.l10n.t("Cursor Models")} ${formatPct(cursorPct, false)}`,
     otherPct === null ? "" : `${vscode.l10n.t("Other Models")} ${formatPct(otherPct, false)}`,
+    includedPct === null ? "" : `${vscode.l10n.t("Included usage")} ${formatPct(includedPct, false)}`,
     progress && progress.percent !== null
       ? `${label} ${formatCents(progress.usedCents!)} / ${formatCents(progress.budgetCents)} · ${formatPct(progress.percent, false)}`
       : "",
   ].filter(Boolean).join(" · ") + paused;
-  const hot = Math.max(cursorPct ?? 0, otherPct ?? 0, progress?.percent ?? 0);
+  const hot = Math.max(cursorPct ?? 0, otherPct ?? 0, includedPct ?? 0, progress?.percent ?? 0);
   return collapsibleSection("budget", title, summary, `${pools.join("")}${dollar}<p class="hint">${escapeHtml(hint)}</p>`, open,
     hot >= 80 ? barColor(hot) : "var(--muted)");
 }
