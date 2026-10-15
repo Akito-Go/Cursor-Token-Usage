@@ -378,6 +378,27 @@ test('failed budget-state persistence can retry without consuming the milestone'
   storage.update = update;
   assert.equal((await monitor.check(usage, 100, 'onDemand')).milestone, 50);
 });
+test('pool milestones alert each included pool once and ignore a missing percent', async () => {
+  const { BudgetMonitor } = load('budget');
+  const storage = memoryState();
+  let monitor = new BudgetMonitor(storage);
+  const usage = snapshot({ cursorModelsPercent: 12.3, otherModelsPercent: 95.9 });
+  const first = await monitor.checkPools(usage);
+  assert.equal(first.length, 1);
+  assert.equal(first[0].pool, 'otherModels');
+  assert.equal(first[0].milestone, 80);
+  monitor = new BudgetMonitor(storage);
+  assert.equal((await monitor.checkPools(usage)).length, 0);
+  const both = await monitor.checkPools(snapshot({ cursorModelsPercent: 100, otherModelsPercent: 96 }));
+  assert.equal(both.length, 1);
+  assert.equal(both[0].pool, 'cursorModels');
+  assert.equal(both[0].milestone, 100);
+  assert.equal((await monitor.checkPools(snapshot({ cursorModelsPercent: 10 }))).length, 0);
+  assert.equal((await monitor.checkPools(snapshot({ isUnlimited: true, cursorModelsPercent: 100, otherModelsPercent: 100 }))).length, 0);
+  assert.equal((await monitor.checkPools(snapshot({ cursorModelsPercent: null, otherModelsPercent: 49 }))).length, 0);
+  const dollar = await monitor.check(snapshot({ cursorModelsPercent: 100, onDemandUsedCents: 5000 }), 100, 'onDemand');
+  assert.equal(dollar.milestone, 50);
+});
 test('today respects local midnight, second timestamps, billing cycle and top-model ordering', () => {
   const { summarizeToday } = load('today');
   const now = new Date(2026, 8, 10, 18, 0);
@@ -445,15 +466,40 @@ test('diagnostic states distinguish successful, partial, failed and skipped endp
   assert.equal(tracker.diagnostics.running, false);
 });
 test('recent usage table shows API cost next to tokens and labels a zero as not returned', () => {
-  const { view } = panelFixture({ snap: snapshot({ eventsComplete: true, events: [
+  const { view } = panelFixture({ snap: snapshot({ eventsComplete: true, totalTokens: 168000, aggregations: [
+    { model: 'grok', inputTokens: 168000, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, totalTokens: 168000 },
+  ], events: [
     { ...event(1_700_000_000_000, 'grok'), totalCents: 168, totalTokens: 168000 },
     { ...event(1_700_000_100_000, 'composer'), totalCents: null, totalTokens: 1000 },
     { ...event(1_700_000_200_000, 'auto'), totalCents: 0, totalTokens: 500 },
   ] }) });
   const html = view.webview.html;
-  assert.match(html, /<th>Time<\/th><th>Model<\/th><th>Kind<\/th><th>Tokens<\/th><th>Cost<\/th>/);
-  assert.match(html, /<td class="num">168000<\/td>\s*<td class="num">168<\/td>/);
-  assert.equal(html.split('class="num missing">API did not return a cost').length - 1, 2);
+  const eventsTable = html.slice(html.indexOf('id="events-table"'));
+  assert.match(eventsTable, /<th>Time<\/th><th>Model<\/th><th>Kind<\/th><th>Tokens<\/th><th>Cost<\/th>/);
+  assert.match(eventsTable, /<td class="num">168000<\/td>\s*<td class="num">168<\/td>/);
+  assert.equal(eventsTable.split('class="num missing">API did not return a cost').length - 1, 2);
+  assert.match(html, /data-cmd="exportCsv"/);
+  assert.match(html, /Click a model row to filter the trend/);
+  assert.doesNotMatch(html, /id="model-table"/);
+  assert.match(html, /class="stat-pill">Requests<strong>3<\/strong>/);
+  assert.match(html, /class="stat-pill">Cost<strong>168<\/strong>/);
+  assert.match(html, /id="model-metric"[\s\S]*value="token"/);
+  assert.match(html, /class="row-tip"[^>]*>[\s\S]*Input 168000[\s\S]*Output 0[\s\S]*Cache 0/);
+});
+test('recent usage defaults to every category and lists model and automation separately', () => {
+  const { view } = panelFixture({ snap: snapshot({ eventsComplete: true, events: [
+    { ...event(3, 'grok-bot-automation'), totalTokens: 0, totalCents: null },
+    { ...event(2, 'grok-4.7-high'), totalTokens: 100, totalCents: 250 },
+  ] }) });
+  const html = view.webview.html;
+  assert.match(html, /id="recent-category"[\s\S]*?<option value="all" selected>All<\/option>/);
+  assert.match(html, /<option value="model">Models<\/option>/);
+  assert.match(html, /<option value="automation">Automation<\/option>/);
+  assert.match(html, /data-category="automation"/);
+  assert.match(html, /data-category="model"/);
+  const payload = JSON.parse(html.match(/id="recent-data">([^<]+)<\/script>/)[1]);
+  assert.deepEqual(payload.rows.map(row => row.category), ['automation', 'model']);
+  assert.equal(payload.rows.filter(row => row.category === 'automation').length, 1);
 });
 test('today labels a zero event-cost total as not returned and keeps a positive sum', () => {
   const now = new Date();
@@ -479,7 +525,8 @@ test('event cost treats an API zero as withheld and formats a positive amount', 
 test('panel exposes today, budget and diagnostics even when budget is disabled', () => {
   const { view } = panelFixture();
   assert.match(view.webview.html, /Top models today|Reported cost/);
-  assert.match(view.webview.html, /No budget configured/);
+  assert.match(view.webview.html, /No dollar alert configured/);
+  assert.match(view.webview.html, /Configure Amount Alert/);
   assert.match(view.webview.html, /data-cmd="budget"/);
   assert.match(view.webview.html, /data-cmd="diagnostics"/);
 });
@@ -532,7 +579,7 @@ test('budget and diagnostic commands are wired to notifications, global settings
   } });
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(notices.length, 1);
-  assert.match(notices[0], /Budget alert.*50%/);
+  assert.match(notices[0], /Amount alert.*50%/);
   tracker.onUpdate();
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(notices.length, 1);
@@ -557,13 +604,38 @@ test('collapsed cards retain partial-data warnings and budget progress without h
   const html = view.webview.html;
   assert.match(html, /<details class="collapsible" data-section="today">/);
   assert.match(html, /<details class="collapsible" data-section="budget">/);
+  assert.match(html, />Allowance alerts</);
   const summaries = [...html.matchAll(/<summary>([\s\S]*?)<\/summary>/g)].map(match => match[1]);
   assert.match(summaries[0], /Cost unavailable.*tokens.*Partial data/);
   assert.match(summaries[1], /8200 \/ 10000.*82/);
   assert.match(summaries[1], /var\(--warn\)/);
-  assert.ok(html.indexOf('Usage Trend') > html.lastIndexOf('</details>'));
+  assert.match(html, /Usage Trend/);
+  assert.doesNotMatch(html, /data-section="trend"/);
+  assert.doesNotMatch(html, /data-section="models"/);
+  assert.doesNotMatch(html, /data-section="recent"/);
+  assert.doesNotMatch(html, /data-section="billing"/);
+  assert.match(html, /class="ring-fg"[^>]*r="54"/);
+  assert.match(html, /class="ring-fg"[^>]*r="40"/);
+  assert.doesNotMatch(html, /class="ring-caption"/);
+  assert.match(html, /ring-face/);
+  assert.match(html, /\(\^_\^\)/);
+  assert.match(html, /class="face-tip"/);
+  assert.match(html, /Included usage is comfortable/);
+  assert.match(html, />Model usage</);
+  assert.match(html, /class="hero-main"/);
+  assert.match(html, /option value="cursor"/);
+  assert.match(html, /option value="other"/);
   const paused = panelFixture({ snap: snapshot({ onDemandUsedCents: 11000 }), config: { budgetAmount: 100, alertEnabled: false } });
   assert.match(paused.view.webview.html.match(/data-section="budget">\s*<summary>([\s\S]*?)<\/summary>/)[1], /var\(--err\).*Alerts paused/);
+  assert.match(paused.view.webview.html, /amount alerts are paused/);
+  const pools = panelFixture({
+    snap: snapshot({ cursorModelsPercent: 12.3, otherModelsPercent: 95.9 }),
+    config: { budgetAmount: 10, budgetMetric: 'included' },
+  });
+  assert.match(pools.view.webview.html, /Cursor Models 12\.3/);
+  assert.match(pools.view.webview.html, /Other Models 95\.9/);
+  assert.match(pools.view.webview.html, /Cursor Models and Other Models alert at 50%/);
+  assert.doesNotMatch(pools.view.webview.html, /Selected usage amount is unavailable/);
 });
 test('independent section preferences survive refresh and new panels; invalid messages do not persist', async () => {
   const storage = memoryState();

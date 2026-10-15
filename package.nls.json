@@ -1,6 +1,6 @@
 {
   "displayName": "Cursor Token Usage",
-  "description": "Live Cursor token billing and usage in the status bar. Details panel, alerts, budgets, and diagnostics; recent usage shows the API cost beside tokens, and costs use API-reported cents only.",
+  "description": "Live Cursor token billing in the status bar. The details panel shows a double usage ring, Cursor Models and Other Models allowance alerts, and API-reported cents only.",
   "viewName": "Token Usage",
   "cmd.showDetails": "Show Token Usage Details",
   "cmd.refresh": "Refresh Token Usage",
@@ -21,8 +21,8 @@
   "config.alertThreshold.otherModels": "Alert when the Other Models pool rises by this many percent",
   "config.alertThreshold.onDemandSpending": "Alert when on-demand spend rises by this many dollars",
   "config.alertThreshold.totalTokens": "Alert when total tokens rise by this amount",
-  "cmd.configureBudget": "Configure Billing-Cycle Budget",
+  "cmd.configureBudget": "Configure Amount Alert",
   "cmd.showDiagnostics": "Show Connection Diagnostics",
-  "config.budgetAmount": "Billing-cycle budget in USD; 0 disables it. Alerts at 50%, 80% and 100% follow the usage-alert switch.",
-  "config.budgetMetric": "Budget basis: onDemand for on-demand spending, included for included usage. Uses API-reported amounts only."
+  "config.budgetAmount": "Dollar amount for the amount alert; 0 disables that alert. Cursor Models and Other Models still alert at 50%, 80% and 100% while usage alerts are on.",
+  "config.budgetMetric": "Amount-alert basis: onDemand for on-demand spending, included for included-usage dollars. Uses API-reported amounts only."
 }

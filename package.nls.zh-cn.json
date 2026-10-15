@@ -1,6 +1,6 @@
 {
   "displayName": "Cursor Token Usage",
-  "description": "在状态栏查看 Cursor 实时 Token 计费与用量。提供详情面板、提醒、预算和诊断；最近消耗在用量旁显示接口费用，费用仅使用接口返回的美分。",
+  "description": "在状态栏查看 Cursor 实时 Token 计费。详情面板提供双环用量，以及 Cursor Models 和 Other Models 的额度提醒；费用只使用接口返回的美分。",
   "viewName": "Token Usage",
   "cmd.showDetails": "查看用量明细",
   "cmd.refresh": "刷新用量",
@@ -21,8 +21,8 @@
   "config.alertThreshold.otherModels": "Other Models 池占比增长达到此百分点时提醒",
   "config.alertThreshold.onDemandSpending": "按需花费增长达到此金额（美元）时提醒",
   "config.alertThreshold.totalTokens": "Token 总量增长达到此数量时提醒",
-  "cmd.configureBudget": "配置周期预算",
+  "cmd.configureBudget": "配置金额提醒",
   "cmd.showDiagnostics": "查看连接诊断",
-  "config.budgetAmount": "账单周期预算（美元）；0 为关闭，在达到 50%、80%、100% 时提醒，受用量提醒总开关控制",
-  "config.budgetMetric": "预算监控口径：onDemand 为按需费用，included 为套餐内用量金额；只使用接口返回金额"
+  "config.budgetAmount": "金额提醒的美元金额；0 为关闭这笔提醒。Cursor Models 和 Other Models 仍在 50%、80%、100% 提醒，受用量提醒总开关控制",
+  "config.budgetMetric": "金额提醒口径：onDemand 为按需费用，included 为套餐内用量金额；只使用接口返回金额"
 }

@@ -3,6 +3,7 @@ import type { Memento } from "vscode";
 import { UsageSnapshot } from "./models";
 
 export type BudgetMetric = "onDemand" | "included";
+export type PoolMilestoneId = "cursorModels" | "otherModels";
 export interface BudgetProgress {
   budgetCents: number;
   usedCents: number | null;
@@ -10,6 +11,11 @@ export interface BudgetProgress {
   metric: BudgetMetric;
 }
 export interface BudgetNotice extends BudgetProgress {
+  milestone: number;
+}
+export interface PoolMilestone {
+  pool: PoolMilestoneId;
+  percent: number;
   milestone: number;
 }
 
@@ -23,6 +29,39 @@ export function budgetProgress(snapshot: UsageSnapshot, amount: number, metric: 
 }
 
 const STATE_KEY = "cursorTokenUsage.budgetMilestones.v1";
+const MILESTONES = [100, 80, 50];
+
+export function poolPercents(snapshot: UsageSnapshot): Array<{ pool: PoolMilestoneId; percent: number }> {
+  if (snapshot.isUnlimited) return [];
+  const rows: Array<{ pool: PoolMilestoneId; percent: number }> = [];
+  for (const [pool, value] of [
+    ["cursorModels", snapshot.cursorModelsPercent],
+    ["otherModels", snapshot.otherModelsPercent],
+  ] as const) {
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0) rows.push({ pool, percent: value });
+  }
+  return rows;
+}
+
+function milestoneFor(percent: number): number | undefined {
+  return MILESTONES.find(value => percent >= value);
+}
+
+function scopeKey(parts: unknown[]): string {
+  return createHash("sha256").update(JSON.stringify(parts)).digest("hex");
+}
+
+function cycleReady(snapshot: UsageSnapshot): boolean {
+  return Boolean(snapshot.accountId)
+    && Number.isFinite(Date.parse(snapshot.billingCycleStart))
+    && Number.isFinite(Date.parse(snapshot.billingCycleEnd))
+    && Date.parse(snapshot.billingCycleEnd) > Date.parse(snapshot.billingCycleStart);
+}
+
+function remember(saved: Record<string, number>, updates: Record<string, number>): Record<string, number> {
+  const next = { ...saved, ...updates };
+  return Object.fromEntries(Object.entries(next).slice(-100));
+}
 
 /** Persist the highest reached milestone before notifying, including across reloads. */
 export class BudgetMonitor {
@@ -35,22 +74,43 @@ export class BudgetMonitor {
     return task;
   }
 
+  checkPools(snapshot: UsageSnapshot): Promise<PoolMilestone[]> {
+    const task = this.queue.then(() => this.evaluatePools(snapshot));
+    this.queue = task.catch(() => undefined);
+    return task;
+  }
+
   private async evaluate(snapshot: UsageSnapshot, amount: number, metric: BudgetMetric): Promise<BudgetNotice | null> {
     const progress = budgetProgress(snapshot, amount, metric);
-    if (!progress || progress.percent === null || !snapshot.accountId ||
-      !Number.isFinite(Date.parse(snapshot.billingCycleStart)) ||
-      !Number.isFinite(Date.parse(snapshot.billingCycleEnd)) ||
-      Date.parse(snapshot.billingCycleEnd) <= Date.parse(snapshot.billingCycleStart)) return null;
-    const milestone = [100, 80, 50].find(value => progress.percent! >= value);
+    if (!progress || progress.percent === null || !cycleReady(snapshot)) return null;
+    const milestone = milestoneFor(progress.percent);
     if (!milestone) return null;
-    const key = createHash("sha256").update(JSON.stringify([
+    const key = scopeKey([
       snapshot.accountId, snapshot.billingCycleStart, snapshot.billingCycleEnd, metric, progress.budgetCents,
-    ])).digest("hex");
+    ]);
     const saved = this.storage.get<Record<string, number>>(STATE_KEY, {});
     if ((saved[key] || 0) >= milestone) return null;
-    // Bound storage to recent budget/cycle combinations. No tokens or raw account IDs are saved.
-    const entries = Object.entries(saved).filter(([id]) => id !== key).slice(-99);
-    await this.storage.update(STATE_KEY, Object.fromEntries([...entries, [key, milestone]]));
+    await this.storage.update(STATE_KEY, remember(saved, { [key]: milestone }));
     return { ...progress, milestone };
+  }
+
+  private async evaluatePools(snapshot: UsageSnapshot): Promise<PoolMilestone[]> {
+    if (!cycleReady(snapshot)) return [];
+    const saved = this.storage.get<Record<string, number>>(STATE_KEY, {});
+    const updates: Record<string, number> = {};
+    const notices: PoolMilestone[] = [];
+    for (const row of poolPercents(snapshot)) {
+      const milestone = milestoneFor(row.percent);
+      if (!milestone) continue;
+      const key = scopeKey([
+        snapshot.accountId, snapshot.billingCycleStart, snapshot.billingCycleEnd, "pool", row.pool,
+      ]);
+      if ((saved[key] || 0) >= milestone) continue;
+      updates[key] = milestone;
+      notices.push({ pool: row.pool, percent: row.percent, milestone });
+    }
+    if (!notices.length) return [];
+    await this.storage.update(STATE_KEY, remember(saved, updates));
+    return notices;
   }
 }

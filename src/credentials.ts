@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
-import { execFile } from "child_process";
+import { readItemValues } from "./sqlite";
 
 const log = vscode.window.createOutputChannel("Cursor Token Usage - Credentials");
 const MAX_JSON_FILE_SIZE = 10 * 1024 * 1024;
@@ -9,12 +9,15 @@ const MAX_JSON_FILE_SIZE = 10 * 1024 * 1024;
 let cachedAccessToken: string | null = null;
 let cachedUserId: string | null = null;
 let autoReadEnabled = false;
+const DB_KEYS = ["cursorAuth/accessToken", "cursorAuth/cachedSignUpId"] as const;
+let dbCache: { path: string; stamp: number; values: Record<string, string> } | null = null;
 
 export function setAutoReadEnabled(enabled: boolean): void {
   autoReadEnabled = enabled;
   if (!enabled) {
     cachedAccessToken = null;
     cachedUserId = null;
+    dbCache = null;
   }
 }
 
@@ -25,6 +28,7 @@ export function isAutoReadEnabled(): boolean {
 export function clearCachedToken(): void {
   cachedAccessToken = null;
   cachedUserId = null;
+  dbCache = null;
 }
 
 export function getDbPath(): string {
@@ -126,38 +130,17 @@ function extractUserId(oauthId: string): string | null {
 }
 
 async function queryDb(dbPath: string, key: string): Promise<string | null> {
-  const cmds = process.platform === "win32" ? ["py", "python", "python3"] : ["python3", "python"];
-  const script =
-    "import sqlite3, sys, pathlib; p = pathlib.Path(sys.argv[1]).expanduser().resolve(); " +
-    "conn = None\n" +
-    "try:\n" +
-    "    conn = sqlite3.connect(p.as_uri() + '?mode=ro', uri=True)\n" +
-    "except Exception:\n" +
-    "    conn = sqlite3.connect(str(p))\n" +
-    "cur = conn.cursor(); " +
-    "cur.execute('SELECT value FROM ItemTable WHERE key = ? LIMIT 1', (sys.argv[2],)); " +
-    "row = cur.fetchone(); print(row[0] if row and row[0] else ''); conn.close()";
-  for (const cmd of cmds) {
-    try {
-      const value = await execFileAsync(cmd, ["-c", script, dbPath, key]);
-      if (value) return value;
-    } catch {
-      /* try next */
+  try {
+    const walPath = `${dbPath}-wal`;
+    let stamp = fs.statSync(dbPath).mtimeMs;
+    if (fs.existsSync(walPath)) stamp += fs.statSync(walPath).mtimeMs;
+    if (!dbCache || dbCache.path !== dbPath || dbCache.stamp !== stamp) {
+      dbCache = { path: dbPath, stamp, values: readItemValues(dbPath, DB_KEYS) };
     }
+    const value = dbCache.values[key];
+    return value ? value : null;
+  } catch (err) {
+    log.appendLine(`无法查询数据库 key=${key}: ${err}`);
+    return null;
   }
-  log.appendLine(`无法查询数据库 key=${key}`);
-  return null;
-}
-
-function execFileAsync(command: string, args: string[]): Promise<string | null> {
-  return new Promise((resolve, reject) => {
-    execFile(command, args, { windowsHide: true, maxBuffer: 1024 * 1024 }, (error, stdout) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-      const trimmed = stdout.trim();
-      resolve(trimmed.length > 0 ? trimmed : null);
-    });
-  });
 }

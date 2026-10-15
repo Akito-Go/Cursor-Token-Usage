@@ -11,11 +11,13 @@ import {
 } from "./api";
 import { setAutoReadEnabled } from "./credentials";
 import { BudgetMetric, BudgetMonitor } from "./budget";
+import { summarizeModels } from "./modelBreakdown";
 import { summarizeToday } from "./today";
 import { UsageAlert, UsageSnapshot } from "./models";
 import { UsagePanel } from "./panel";
+import { buildUsageTooltipMarkdown, TooltipMetric } from "./tooltip";
 import { UsageTracker } from "./tracker";
-import { formatPct, formatTokens, membershipLabel } from "./treeView";
+import { formatEventCost, formatPct, formatTokens, membershipLabel, shortenModel } from "./treeView";
 
 let pollTimer: NodeJS.Timeout | undefined;
 let tracker: UsageTracker;
@@ -61,6 +63,11 @@ export function activate(context: vscode.ExtensionContext): void {
       startPolling();
       if (state.focused && hasPollConsumer()) void tracker.poll();
     }),
+    ...(typeof vscode.window.onDidChangeActiveColorTheme === "function"
+      ? [vscode.window.onDidChangeActiveColorTheme(() => {
+          if (tracker.lastSnapshot) updateStatusBar();
+        })]
+      : []),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration("cursorTokenUsage.budgetAmount") || e.affectsConfiguration("cursorTokenUsage.budgetMetric")) {
         UsagePanel.current?.refresh();
@@ -225,7 +232,7 @@ function updateStatusBar(): void {
     mainStatusBar.text = `${STATUS_ICON} C ${c} · O ${o}`;
   }
   const warning = tracker.dataWarning;
-  mainStatusBar.tooltip = [warning, buildTooltip(snapshot)].filter(Boolean).join("\n");
+  mainStatusBar.tooltip = statusTooltip(snapshot, warning);
   if (warning) {
     mainStatusBar.text = `$(warning) ${mainStatusBar.text.replace(`${STATUS_ICON} `, "")}`;
     mainStatusBar.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
@@ -245,29 +252,75 @@ function updateStatusBar(): void {
   }
 }
 
-function buildTooltip(snapshot: UsageSnapshot): string {
+function statusTooltip(snapshot: UsageSnapshot, warning: string | null): vscode.MarkdownString | string {
   const today = summarizeToday(snapshot);
-  const lines = [
-    `Cursor Token Usage · ${membershipLabel(snapshot.membershipType)}`,
-    snapshot.displayMode === "overall" && snapshot.overallUsedCents !== null && snapshot.overallLimitCents !== null
-      ? `${vscode.l10n.t("Included usage")}: ${formatCents(snapshot.overallUsedCents)}/${formatCents(snapshot.overallLimitCents)}`
-      : "",
-    snapshot.cursorModelsPercent !== null ? `Cursor Models: ${formatPct(snapshot.cursorModelsPercent, snapshot.isUnlimited)}` : "",
-    snapshot.otherModelsPercent !== null ? `Other Models: ${formatPct(snapshot.otherModelsPercent, snapshot.isUnlimited)}` : "",
-    countdownLine(snapshot.billingCycleEnd),
-    snapshot.onDemandEnabled && snapshot.onDemandUsedCents !== null
-      ? `On-Demand: ${formatCents(snapshot.onDemandUsedCents)}${
-          snapshot.onDemandLimitCents && snapshot.onDemandLimitCents > 0
-            ? `/${formatCents(snapshot.onDemandLimitCents)}`
-            : ""
-        }`
-      : "",
-    `${vscode.l10n.t("Total Tokens")}: ${formatTokens(snapshot.totalTokens)}`,
-    vscode.l10n.t("Today: {0} tokens, {1} requests ({2})", formatTokens(today.tokens), today.requests,
+  const markdown = buildUsageTooltipMarkdown({
+    title: `Cursor Token Usage · ${membershipLabel(snapshot.membershipType)}`,
+    metrics: tooltipMetrics(snapshot),
+    models: summarizeModels(snapshot).slice(0, 5).map((row) => ({
+      model: shortenModel(row.model),
+      requests: String(row.requests),
+      tokens: formatTokens(row.tokens),
+      cost: row.spendCents === null ? vscode.l10n.t("API did not return a cost") : formatEventCost(row.spendCents),
+    })),
+    modelHeading: vscode.l10n.t("By Model"),
+    modelHeaders: [vscode.l10n.t("Model"), vscode.l10n.t("Requests"), vscode.l10n.t("Tokens"), vscode.l10n.t("Cost")],
+    reset: countdownLine(snapshot.billingCycleEnd),
+    today: vscode.l10n.t("Today: {0} tokens, {1} requests ({2})", formatTokens(today.tokens), today.requests,
       today.historyComplete ? vscode.l10n.t("loaded history") : vscode.l10n.t("partial history")),
-    vscode.l10n.t("Click to view details"),
-  ];
-  return lines.filter((line) => line).join("\n");
+    detailsLabel: vscode.l10n.t("Click to view details"),
+    refreshLabel: vscode.l10n.t("Refresh Token Usage"),
+    light: tooltipIsLight(),
+  });
+  const body = warning ? `**${warning}**\n\n${markdown}` : markdown;
+  if (typeof vscode.MarkdownString !== "function") return body;
+  const tooltip = new vscode.MarkdownString(body, true);
+  tooltip.supportHtml = true;
+  tooltip.supportThemeIcons = true;
+  tooltip.isTrusted = { enabledCommands: ["cursor-token-usage.showDetails", "cursor-token-usage.refresh"] };
+  return tooltip;
+}
+
+function tooltipIsLight(): boolean {
+  const kind = vscode.window.activeColorTheme?.kind;
+  const themes = vscode.ColorThemeKind;
+  if (!themes || kind === undefined) return false;
+  return kind === themes.Light || kind === themes.HighContrastLight;
+}
+
+function tooltipMetrics(snapshot: UsageSnapshot): TooltipMetric[] {
+  const metrics: TooltipMetric[] = [];
+  if (snapshot.displayMode === "overall" && snapshot.overallUsedCents !== null && snapshot.overallLimitCents !== null && snapshot.overallLimitCents > 0) {
+    metrics.push({
+      label: vscode.l10n.t("Included usage"),
+      value: `${formatCents(snapshot.overallUsedCents)} / ${formatCents(snapshot.overallLimitCents)}`,
+      ratio: snapshot.isUnlimited ? null : snapshot.overallUsedCents / snapshot.overallLimitCents,
+    });
+  } else {
+    if (snapshot.cursorModelsPercent !== null) {
+      metrics.push({
+        label: "Cursor Models",
+        value: formatPct(snapshot.cursorModelsPercent, snapshot.isUnlimited),
+        ratio: snapshot.isUnlimited ? null : snapshot.cursorModelsPercent / 100,
+      });
+    }
+    if (snapshot.otherModelsPercent !== null) {
+      metrics.push({
+        label: "Other Models",
+        value: formatPct(snapshot.otherModelsPercent, snapshot.isUnlimited),
+        ratio: snapshot.isUnlimited ? null : snapshot.otherModelsPercent / 100,
+      });
+    }
+  }
+  if (snapshot.onDemandEnabled && snapshot.onDemandUsedCents !== null) {
+    const limit = snapshot.onDemandLimitCents && snapshot.onDemandLimitCents > 0 ? snapshot.onDemandLimitCents : null;
+    metrics.push({
+      label: vscode.l10n.t("On-Demand"),
+      value: limit ? `${formatCents(snapshot.onDemandUsedCents)} / ${formatCents(limit)}` : formatCents(snapshot.onDemandUsedCents),
+      ratio: limit ? snapshot.onDemandUsedCents / limit : null,
+    });
+  }
+  return metrics;
 }
 
 function countdownLine(endIso: string): string {
@@ -453,14 +506,19 @@ async function checkBudget(): Promise<void> {
   const config = vscode.workspace.getConfiguration("cursorTokenUsage");
   if (!snapshot || tracker.lastError || !config.get("alertEnabled", true)) return;
   try {
+    for (const notice of await budgetMonitor.checkPools(snapshot)) {
+      const label = notice.pool === "cursorModels" ? vscode.l10n.t("Cursor Models") : vscode.l10n.t("Other Models");
+      void vscode.window.showWarningMessage(vscode.l10n.t("Pool alert: {0} reached {1}% ({2})",
+        label, notice.milestone, formatPct(notice.percent, false)));
+    }
     const notice = await budgetMonitor.check(snapshot, config.get("budgetAmount", 0), config.get<BudgetMetric>("budgetMetric", "onDemand"));
     if (notice) {
       const label = notice.metric === "included" ? vscode.l10n.t("Included usage") : vscode.l10n.t("On-Demand");
-      void vscode.window.showWarningMessage(vscode.l10n.t("Budget alert: {0} reached {1}% ({2} / {3})",
+      void vscode.window.showWarningMessage(vscode.l10n.t("Amount alert: {0} reached {1}% ({2} / {3})",
         label, notice.milestone, formatCents(notice.usedCents!), formatCents(notice.budgetCents)));
     }
   } catch {
-    void vscode.window.showWarningMessage(vscode.l10n.t("Could not save budget alert state. The alert will be retried on the next poll."));
+    void vscode.window.showWarningMessage(vscode.l10n.t("Could not save the amount-alert state. The alert will be retried on the next poll."));
   }
 }
 
@@ -473,7 +531,7 @@ async function configureBudget(): Promise<void> {
   { placeHolder: vscode.l10n.t("Choose which billing-cycle amount to monitor") });
   if (!metric) return;
   const amount = await vscode.window.showInputBox({
-    prompt: vscode.l10n.t("Billing-cycle budget in USD (0 disables budget alerts)"),
+    prompt: vscode.l10n.t("Amount alert in USD (0 disables this alert)"),
     value: String(config.get("budgetAmount", 0)),
     validateInput: value => {
       const number = Number(value);
