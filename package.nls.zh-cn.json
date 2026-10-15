@@ -1,6 +1,6 @@
 {
   "displayName": "Cursor Token Usage",
-  "description": "在状态栏查看 Cursor 实时 Token 计费。详情面板提供双环用量，以及 Cursor Models 和 Other Models 的额度提醒；费用只使用接口返回的美分。",
+  "description": "在状态栏查看 Cursor 实时 Token 计费。个人版是双环用量和额度提醒；企业版在接口只返回套餐内美元时仍用同一套颜文字和额度提醒。费用只使用接口返回的美分。",
   "viewName": "Token Usage",
   "cmd.showDetails": "查看用量明细",
   "cmd.refresh": "刷新用量",

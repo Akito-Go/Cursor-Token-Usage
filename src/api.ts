@@ -150,8 +150,8 @@ function parseCents(value: unknown): number | null {
 
 /**
  * Account type is inferred from /api/usage-summary, not from the session token.
- * Individual: plan.autoPercentUsed / apiPercentUsed → pool %.
- * Team/Enterprise: individualUsage.overall used/limit (cents) → $ used/$ limit.
+ * Individual, and Team/Enterprise when plan percents exist: autoPercentUsed / apiPercentUsed → pool %.
+ * Team/Enterprise with only individualUsage.overall used/limit: one included-spend ratio, same kaomoji and 50/80/100 alerts.
  * Never multiply tokens by list prices; only display cents the API returns.
  */
 function parseSummary(data: Record<string, unknown>): Omit<UsageSnapshot, "timestamp" | "accountId" | "aggregations" | "events" | "eventsComplete" | "totalTokens"> {

@@ -206,6 +206,7 @@ npx @vscode/vsce package --no-dependencies
 - 请求数、接口费用和 Token 合计放在页面右上角。套餐卡片是双环：外环 Other Models，内环 Cursor Models，旁边是 C / O 和重置倒计时。环心颜文字跟着较高的那一份额度变化：40% 以下 `(^_^)`，80% 以下 `(・_・)`，100% 以下 `(>_<)`，超过 100% 是 `(×_×)`。悬停表情可看说明
 - 使用趋势、模型用量和最近消耗固定展开。今日消费和额度提醒默认收起
 - 额度提醒对 Cursor Models 和 Other Models 分别在 50%、80%、100% 各提醒一次，重载后同一档不重复。面板按钮和命令改为「配置金额提醒」，只在接口返回对应美元时生效；没有套餐内美元时不再显示「暂无用量金额」
+- 企业账号如果接口只返回套餐内已用美元和上限，环是单环，环心仍用同一套颜文字；额度按已用金额相对上限的百分比在 50%、80%、100% 提醒，状态栏显示已用金额和上限。接口如果同时返回两份额度百分比，则和个人版一样是双环
 
 ### 更新说明（1.1.3）
 
@@ -487,6 +488,7 @@ This version produces `cursor-token-usage-1.1.4.vsix`. Install it, then run **De
 - Put request count, API cost and total tokens at the top right. The included-usage card is a double ring: outer Other Models, inner Cursor Models, with C / O and the reset countdown beside it. The center kaomoji follows the higher pool: `(^_^)` under 40%, `(・_・)` under 80%, `(>_<)` under 100%, and `(×_×)` from 100%. Hover the face for the note
 - Keep Usage trend, Model usage and recent usage expanded. Today and Allowance alerts stay collapsed by default
 - Allowance alerts notify Cursor Models and Other Models separately at 50%, 80% and 100%, once per level across reloads. The panel button and command are Configure Amount Alert, and that dollar alert runs only when the API returns the amount. A missing included-usage dollar no longer shows “usage amount unavailable”
+- When a Team or Enterprise summary returns included dollars and a limit instead of the two pool percents, the ring stays a single arc and the center still uses the kaomoji. Allowance alerts use that included-spend percent at 50%, 80% and 100%, and the status bar shows the dollar amounts. If the summary also returns the two pool percents, the card matches the individual double ring
 
 ## Changelog (1.1.3)
 

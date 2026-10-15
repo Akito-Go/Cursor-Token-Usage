@@ -1,6 +1,6 @@
 {
   "displayName": "Cursor Token Usage",
-  "description": "Live Cursor token billing in the status bar. The details panel shows a double usage ring, Cursor Models and Other Models allowance alerts, and API-reported cents only.",
+  "description": "Live Cursor token billing in the status bar. Individual plans show a double usage ring; Team and Enterprise use the same kaomoji and allowance alerts when the summary returns included dollars. Costs use API-reported cents only.",
   "viewName": "Token Usage",
   "cmd.showDetails": "Show Token Usage Details",
   "cmd.refresh": "Refresh Token Usage",
